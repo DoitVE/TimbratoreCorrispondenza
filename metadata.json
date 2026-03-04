@@ -1,0 +1,5 @@
+{
+  "name": "DOIT VE Web app Timbri",
+  "description": "An intelligent document assistant for FS Group executives. Upload PDFs, automatically detect administrative routing stamps using Gemini Vision, and digitally annotate checkboxes.",
+  "requestFramePermissions": []
+}
