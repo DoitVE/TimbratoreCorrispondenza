@@ -34,7 +34,8 @@ export const STAMP_DEFINITIONS: Record<StampType, { title: string, rows: RowDef[
       { left: 'UM LV CSTLFR', right: 'SPC. OP. ARTE' },
       { left: 'UM IS TV-BL', right: 'PROG. E CTRL' }, 
       { left: 'UM IS CSTLFR', right: 'SPC. MATERIALI' }, 
-      { left: 'UM TE TV-CSTLFR', right: 'SEGRETERIA' }
+      { left: 'UM TE TV-BL', right: 'C.P.M.' }, 
+      { left: 'UM TE CSTLFR', right: 'SEGRETERIA' }
     ]
   },
   'UT_SUD_VE': {
