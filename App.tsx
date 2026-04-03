@@ -23,6 +23,7 @@ function App() {
   const [activeTool, setActiveTool] = useState<'none' | 'check' | 'text' | 'signature'>('none');
   const [pendingSignatureUrl, setPendingSignatureUrl] = useState<string | null>(null);
   const [showMailModal, setShowMailModal] = useState<boolean>(false);
+  const [lastArchiveJson, setLastArchiveJson] = useState<string | undefined>(undefined);
 
   const resetSession = useCallback(() => {
       setAppMode('selection');
@@ -33,6 +34,7 @@ function App() {
       setActiveTool('none');
       setPendingSignatureUrl(null);
       setShowMailModal(false);
+      setLastArchiveJson(undefined);
   }, []);
 
   const handleGoHome = useCallback(() => {
@@ -317,8 +319,16 @@ function App() {
       updateCurrentDocumentPage(pageIndex, { stamps: newStamps });
   }
 
-  const handleCompletion = () => {
+  const handleCompletion = async () => {
     if (window.confirm("Elaborazione completata! Vuoi generare una mail per notificare?")) {
+        if (appMode === 'segreteria' && workMode === 'archive') {
+            try {
+                const jsonString = await createArchiveJSON(documents);
+                setLastArchiveJson(jsonString);
+            } catch (err) {
+                console.error("Failed to pre-generate JSON for mail", err);
+            }
+        }
         setShowMailModal(true);
     } else {
         resetSession();
@@ -336,6 +346,12 @@ function App() {
              setVisiblePageIndex(0);
          } else {
              if (window.confirm("Tutti i documenti della coda sono stati elaborati.\nVuoi generare la mail di notifica ora?\n(Assicurati di esportare il JSON per non perdere il lavoro)")) {
+                 try {
+                     const jsonString = await createArchiveJSON(documents);
+                     setLastArchiveJson(jsonString);
+                 } catch (err) {
+                     console.error("Failed to pre-generate JSON for mail", err);
+                 }
                  setShowMailModal(true);
              }
          }
@@ -426,6 +442,7 @@ function App() {
   const handleExportArchive = async () => {
       try {
           const jsonString = await createArchiveJSON(documents);
+          setLastArchiveJson(jsonString); // Salva per l'eventuale mail successiva
           
           const formatArchiveFileName = () => {
               const now = new Date();
@@ -525,7 +542,12 @@ function App() {
           currentDocIndex={currentDocIndex}
         />
       </div>
-      <MailModal isOpen={showMailModal} mode={appMode} onClose={resetSession} />
+      <MailModal 
+        isOpen={showMailModal} 
+        mode={appMode} 
+        onClose={resetSession} 
+        archiveJson={appMode === 'segreteria' && workMode === 'archive' ? lastArchiveJson : undefined} 
+      />
     </div>
   );
 }
