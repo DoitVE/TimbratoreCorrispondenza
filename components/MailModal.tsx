@@ -5,6 +5,7 @@ interface MailModalProps {
   isOpen: boolean;
   mode: AppMode;
   onClose: () => void; // Triggered when cancelled or finished
+  archiveJson?: string; // Optional JSON for attachment
 }
 
 interface Recipient {
@@ -26,7 +27,7 @@ const DIRIGENTE_RECIPIENTS: Recipient[] = [
   { label: 'UTS (G. Fabbri)', email: 'g.fabbri@rfi.it' }
 ];
 
-export const MailModal: React.FC<MailModalProps> = ({ isOpen, mode, onClose }) => {
+export const MailModal: React.FC<MailModalProps> = ({ isOpen, mode, onClose, archiveJson }) => {
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<string>('');
   const [sharedPath, setSharedPath] = useState<string>('');
@@ -52,11 +53,15 @@ export const MailModal: React.FC<MailModalProps> = ({ isOpen, mode, onClose }) =
 
     // Check for DOIT VE
     if (targetLabel.includes('DOIT VE')) {
-        setSharedPath('https://gruppofsitaliane.sharepoint.com/sites/RFI3/dtp-ve/SEGR/Forms/AllItems.aspx?e=5%3Acb1ba50305dd465c930ebfbd49c2d87e&sharingv2=true&fromShare=true&at=9&clickparams=eyAiWC1BcHBOYW1lIiA6ICJNaWNyb3NvZnQgT3V0bG9vayIsICJYLUFwcFZlcnNpb24iIDogIjE2LjAuMTY3MzEuMjA2MzYiLCAiT1MiIDogIldpbmRvd3MiIH0%3D&CID=bd612da1%2D10a1%2D8000%2De12c%2Dda5d38f46757&cidOR=SPO&FolderCTID=0x012000994FC3F634930B4E968190AF328C2E11&id=%2Fsites%2FRFI3%2Fdtp%2Dve%2FSEGR%2Fsegreteria%2F1CORRISPONDENZA&viewid=7b192df2%2D33be%2D4378%2D884e%2D1f223fed8c52');
+        setSharedPath('https://gruppofsitaliane.sharepoint.com/sites/RFI3/dtp-ve/SEGR/Forms/AllItems.aspx?e=5%3Acb1ba50305dd465c930ebfbd49c2d87e&sharingv2=true&fromShare=true&at=9&clickparams=eyAiWC1BcHBOYW1lIiA6ICJNaWNyb3NvZnQgT3V0bG9vayIsICJYLUFwcFZlcnNpb24iIDogIjE2LjAuMTk3MjUuMjAxNzAiLCAiT1MiIDogIldpbmRvd3MiIH0%3D&CID=bd612da1%2D10a1%2D8000%2De12c%2Dda5d38f46757&cidOR=SPO&FolderCTID=0x012000994FC3F634930B4E968190AF328C2E11&id=%2Fsites%2FRFI3%2Fdtp%2Dve%2FSEGR%2Fsegreteria%2F1CORRISPONDENZA&viewid=7b192df2%2D33be%2D4378%2D884e%2D1f223fed8c52');
     } 
     // Check for ING VE
     else if (targetLabel.includes('ING VE') || targetLabel.includes('INGEGNERIA')) {
         setSharedPath('https://gruppofsitaliane.sharepoint.com/sites/RFI3/dtp-ve/ING/Forms/AllItems.aspx?id=%2Fsites%2FRFI3%2Fdtp%2Dve%2FING%2FSEGR%2FCorrispondenza&viewid=d8eab92d%2D0dcc%2D4f6a%2D92b2%2D5205250bb6b8&p=true&fromShare=true&ovuser=4c8a6547%2D459a%2D4b75%2Da3dc%2Df66efe3e9c4e%2C964217%40rfi%2Eit&OR=Teams%2DHL&CT=1769767258238&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNjAxMDQwMDkyNSIsIkhhc0ZlZGVyYXRlZFVzZXIiOmZhbHNlfQ%3D%3D');
+    }
+    // Check for UTN VE
+    else if (targetLabel.includes('UTN')) {
+        setSharedPath('https://gruppofsitaliane.sharepoint.com/sites/RFI3/dtp-ve/UTN/Forms/AllItems.aspx?e=5%3Ad25fd0d0e8c4481c9f0e860496cc5e2d&sharingv2=true&fromShare=true&at=9&clickparams=eyAiWC1BcHBOYW1lIiA6ICJNaWNyb3NvZnQgT3V0bG9vayIsICJYLUFwcFZlcnNpb24iIDogIjE2LjAuMTk3MjUuMjAxNzAiLCAiT1MiIDogIldpbmRvd3MiIH0%3D&CID=d05506a2%2D703d%2D0001%2D3161%2D9ea006773d14&cidOR=SPO&FolderCTID=0x012000FFE454EE4672E146BB0B7CC97DC88B17&id=%2Fsites%2FRFI3%2Fdtp%2Dve%2FUTN%2FSEGRETERIA%2FPROTON%2FCORRISPONDENZA%20UTN');
     }
     else {
         setSharedPath('');
@@ -88,6 +93,7 @@ export const MailModal: React.FC<MailModalProps> = ({ isOpen, mode, onClose }) =
             const label = recipient.label.toUpperCase();
             if (label.includes("DOIT VE")) linkName = "LINK CONDIVISA DOIT VE";
             else if (label.includes("ING VE") || label.includes("INGEGNERIA")) linkName = "LINK CONDIVISA ING VE";
+            else if (label.includes("UTN")) linkName = "LINK CONDIVISA UTN VE";
         }
         
         sharedLinkHtml = `<br><br><a href="${sharedPath}">${linkName}</a>`;
@@ -113,8 +119,38 @@ export const MailModal: React.FC<MailModalProps> = ({ isOpen, mode, onClose }) =
       `;
     }
 
-    // Construct EML content (HTML)
-    const emlContent = `To: ${selectedEmail}
+    // Costruzione contenuto EML con eventuale allegato
+    const boundary = "----=_Part_" + Math.random().toString(36).substring(2);
+    let emlContent = "";
+
+    if (archiveJson) {
+      const jsonFileName = `Corrispondenza_${day}.${month}.${year}_ore_${hours}.${minutes}.json`;
+      emlContent = `To: ${selectedEmail}
+Subject: ${subject}
+X-Unsent: 1
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="${boundary}"
+
+--${boundary}
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: 7bit
+
+<!DOCTYPE html>
+<html>
+<body>
+${bodyHtml}
+</body>
+</html>
+
+--${boundary}
+Content-Type: application/json; name="${jsonFileName}"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="${jsonFileName}"
+
+${window.btoa(unescape(encodeURIComponent(archiveJson)))}
+--${boundary}--`;
+    } else {
+      emlContent = `To: ${selectedEmail}
 Subject: ${subject}
 X-Unsent: 1
 MIME-Version: 1.0
@@ -126,6 +162,7 @@ Content-Type: text/html; charset="UTF-8"
 ${bodyHtml}
 </body>
 </html>`;
+    }
 
     const blob = new Blob([emlContent], { type: 'message/rfc822' });
     const fileName = `Notifica_${mode === 'segreteria' ? 'Dirigente' : 'Segreteria'}_${new Date().toISOString().slice(0, 10)}.eml`;
