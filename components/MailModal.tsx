@@ -100,7 +100,7 @@ export const MailModal: React.FC<MailModalProps> = ({ isOpen, mode, onClose }) =
         <p>Sono stati aggiunti nuovi documenti nella cartella condivisa della corrispondenza. Si prega il Dirigente di apporre postilla di inoltro.</p>
         ${sharedLinkHtml}
         <br><br>
-        <p>Web App per elaborazione: <a href="https://doit-ve-gestore-corrispondenza.vercel.app/">https://doit-ve-gestore-corrispondenza.vercel.app/</a></p>
+        <p>Web App per elaborazione: <a href="https://doitve-corrispondenza.vercel.app/">https://doitve-corrispondenza.vercel.app/</a></p>
       `;
     } else {
       subject = `NOTIFICA DIRIGENTE: Corrispondenza pronta per inoltro ${dateTimeStr}`;
@@ -109,7 +109,7 @@ export const MailModal: React.FC<MailModalProps> = ({ isOpen, mode, onClose }) =
         <p>I documenti nella cartella condivisa della corrispondenza sono pronti per l'inoltro.</p>
         ${sharedLinkHtml}
         <br><br>
-        <p>Web App per elaborazione: <a href="https://doit-ve-gestore-corrispondenza.vercel.app/">https://doit-ve-gestore-corrispondenza.vercel.app/</a></p>
+        <p>Web App per elaborazione: <a href="https://doitve-corrispondenza.vercel.app/">https://doitve-corrispondenza.vercel.app/</a></p>
       `;
     }
 
