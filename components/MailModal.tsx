@@ -123,8 +123,30 @@ export const MailModal: React.FC<MailModalProps> = ({ isOpen, mode, onClose, arc
     const boundary = "----=_Part_" + Math.random().toString(36).substring(2);
     let emlContent = "";
 
+    console.log("Archive JSON present:", !!archiveJson);
+
     if (archiveJson) {
       const jsonFileName = `Corrispondenza_${day}.${month}.${year}_ore_${hours}.${minutes}.json`;
+      
+      // Funzione sicura per Base64 di stringhe UTF-8
+      const toBase64 = (str: string) => {
+        try {
+          const bytes = new TextEncoder().encode(str);
+          let binary = '';
+          const len = bytes.byteLength;
+          for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          return window.btoa(binary);
+        } catch (e) {
+          console.error("Base64 conversion error:", e);
+          return "";
+        }
+      };
+
+      const base64Data = toBase64(archiveJson);
+      console.log("Base64 JSON length:", base64Data.length);
+      
       emlContent = `To: ${selectedEmail}
 Subject: ${subject}
 X-Unsent: 1
@@ -147,7 +169,7 @@ Content-Type: application/json; name="${jsonFileName}"
 Content-Transfer-Encoding: base64
 Content-Disposition: attachment; filename="${jsonFileName}"
 
-${window.btoa(unescape(encodeURIComponent(archiveJson)))}
+${base64Data}
 --${boundary}--`;
     } else {
       emlContent = `To: ${selectedEmail}
