@@ -128,7 +128,7 @@ export const MailModal: React.FC<MailModalProps> = ({ isOpen, mode, onClose, arc
     if (archiveJson) {
       const jsonFileName = `Corrispondenza_${day}.${month}.${year}_ore_${hours}.${minutes}.json`;
       
-      // Funzione sicura per Base64 di stringhe UTF-8
+      // Funzione sicura per Base64 di stringhe UTF-8 con wrapping MIME a 76 caratteri
       const toBase64 = (str: string) => {
         try {
           const bytes = new TextEncoder().encode(str);
@@ -137,7 +137,14 @@ export const MailModal: React.FC<MailModalProps> = ({ isOpen, mode, onClose, arc
           for (let i = 0; i < len; i++) {
             binary += String.fromCharCode(bytes[i]);
           }
-          return window.btoa(binary);
+          const base64 = window.btoa(binary);
+          
+          // MIME richiede che le righe non superino i 76 caratteri
+          let formattedBase64 = "";
+          for (let i = 0; i < base64.length; i += 76) {
+            formattedBase64 += base64.substring(i, i + 76) + "\r\n";
+          }
+          return formattedBase64;
         } catch (e) {
           console.error("Base64 conversion error:", e);
           return "";
@@ -147,43 +154,28 @@ export const MailModal: React.FC<MailModalProps> = ({ isOpen, mode, onClose, arc
       const base64Data = toBase64(archiveJson);
       console.log("Base64 JSON length:", base64Data.length);
       
-      emlContent = `To: ${selectedEmail}
-Subject: ${subject}
-X-Unsent: 1
-MIME-Version: 1.0
-Content-Type: multipart/mixed; boundary="${boundary}"
-
---${boundary}
-Content-Type: text/html; charset="UTF-8"
-Content-Transfer-Encoding: 7bit
-
-<!DOCTYPE html>
-<html>
-<body>
-${bodyHtml}
-</body>
-</html>
-
---${boundary}
-Content-Type: application/json; name="${jsonFileName}"
-Content-Transfer-Encoding: base64
-Content-Disposition: attachment; filename="${jsonFileName}"
-
-${base64Data}
---${boundary}--`;
+      emlContent = `To: ${selectedEmail}\r\n` +
+        `Subject: ${subject}\r\n` +
+        `X-Unsent: 1\r\n` +
+        `MIME-Version: 1.0\r\n` +
+        `Content-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n` +
+        `--${boundary}\r\n` +
+        `Content-Type: text/html; charset="UTF-8"\r\n` +
+        `Content-Transfer-Encoding: 7bit\r\n\r\n` +
+        `<!DOCTYPE html>\r\n<html>\r\n<body>\r\n${bodyHtml}\r\n</body>\r\n</html>\r\n\r\n` +
+        `--${boundary}\r\n` +
+        `Content-Type: application/json; name="${jsonFileName}"\r\n` +
+        `Content-Transfer-Encoding: base64\r\n` +
+        `Content-Disposition: attachment; filename="${jsonFileName}"\r\n\r\n` +
+        `${base64Data}\r\n` +
+        `--${boundary}--`;
     } else {
-      emlContent = `To: ${selectedEmail}
-Subject: ${subject}
-X-Unsent: 1
-MIME-Version: 1.0
-Content-Type: text/html; charset="UTF-8"
-
-<!DOCTYPE html>
-<html>
-<body>
-${bodyHtml}
-</body>
-</html>`;
+      emlContent = `To: ${selectedEmail}\r\n` +
+        `Subject: ${subject}\r\n` +
+        `X-Unsent: 1\r\n` +
+        `MIME-Version: 1.0\r\n` +
+        `Content-Type: text/html; charset="UTF-8"\r\n\r\n` +
+        `<!DOCTYPE html>\r\n<html>\r\n<body>\r\n${bodyHtml}\r\n</body>\r\n</html>`;
     }
 
     const blob = new Blob([emlContent], { type: 'message/rfc822' });
