@@ -61,7 +61,7 @@ export const MailModal: React.FC<MailModalProps> = ({ isOpen, mode, onClose, arc
     }
     // Check for UTN VE
     else if (targetLabel.includes('UTN')) {
-        setSharedPath('https://gruppofsitaliane.sharepoint.com/sites/RFI3/dtp-ve/UTN/Forms/AllItems.aspx?e=5%3Ad25fd0d0e8c4481c9f0e860496cc5e2d&sharingv2=true&fromShare=true&at=9&clickparams=eyAiWC1BcHBOYW1lIiA6ICJNaWNyb3NvZnQgT3V0bG9vayIsICJYLUFwcFZlcnNpb24iIDogIjE2LjAuMTk3MjUuMjAxNzAiLCAiT1MiIDogIldpbmRvd3MiIH0%3D&CID=d05506a2%2D703d%2D0001%2D3161%2D9ea006773d14&cidOR=SPO&FolderCTID=0x012000FFE454EE4672E146BB0B7CC97DC88B17&id=%2Fsites%2FRFI3%2Fdtp%2Dve%2FUTN%2FSEGRETERIA%2FPROTON%2FCORRISPONDENZA%20UTN');
+        setSharedPath('https://gruppofsitaliane.sharepoint.com/sites/RFI3/dtp-ve/UTN/Forms/AllItems.aspx?e=5%3Aa4be2f5be34144c0897978b3bceefa81&sharingv2=true&fromShare=true&at=9&clickparams=eyAiWC1BcHBOYW1lIiA6ICJNaWNyb3NvZnQgT3V0bG9vayIsICJYLUFwcFZlcnNpb24iIDogIjE2LjAuMTk4MjIuMjAxODAiLCAiT1MiIDogIldpbmRvd3MiIH0%3D&CID=3e210da2%2D4092%2D0001%2Dabaa%2D09ed87af9adc&cidOR=SPO&FolderCTID=0x012000FFE454EE4672E146BB0B7CC97DC88B17&id=%2Fsites%2FRFI3%2Fdtp%2Dve%2FUTN%2FSEGRETERIA%2FPROTON%2FCORRISPONDENZA%20UTN');
     }
     else {
         setSharedPath('');
