@@ -1,7 +1,7 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { PageData, StampData } from '../types';
-import { getUniformLabelFontSizeCqw } from '../services/stampUtils';
+import { StampType, getUniformLabelFontSizeCqw } from '../services/stampUtils';
 
 const THICK_WHITE_HALO = '0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff';
 const EXTRA_THICK_HALO = '0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff, 0 0 4px #fff, 0 0 4px #fff';
@@ -20,7 +20,7 @@ interface MainViewProps {
   workMode: 'standard' | 'archive';
   activeTool?: 'none' | 'check' | 'text' | 'signature';
   onToolPlace?: (pageIndex: number, x: number, y: number) => void;
-  doitSignatureUrl?: string;
+  stampHeaderUrls?: Record<StampType, string | undefined>;
   onExportArchive?: () => void;
   onPrevDocument?: () => void;
   currentDocIndex?: number;
@@ -40,7 +40,7 @@ export const MainView: React.FC<MainViewProps> = ({
   workMode,
   activeTool,
   onToolPlace,
-  doitSignatureUrl,
+  stampHeaderUrls,
   onExportArchive,
   onPrevDocument,
   currentDocIndex = 0
@@ -408,9 +408,9 @@ export const MainView: React.FC<MainViewProps> = ({
                 <div className="w-[25%] flex items-center justify-end h-full relative overflow-hidden bg-transparent">
                     {!hideStructureOnly && (
                         <>
-                            {(stamp.type === 'DOIT_VE' && doitSignatureUrl) && (
+                                    {headerImageUrl ? (
                                 <img 
-                                    src={doitSignatureUrl} 
+                                    src={headerImageUrl} 
                                     alt="Firma" 
                                     className="absolute right-0 top-0 h-full w-full object-fill pointer-events-none"
                                     style={{ 
@@ -418,8 +418,7 @@ export const MainView: React.FC<MainViewProps> = ({
                                         display: 'block'
                                     }}
                                 />
-                            )}
-                            {(isStandardStamp(stamp.type) && stamp.type !== 'DOIT_VE') && (
+                            ) : stamp.type === 'UT_SUD_VE' ? (
                                 <img 
                                     src="https://i.imgur.com/pGhDap2.png" 
                                     alt="Firma" 
@@ -429,7 +428,7 @@ export const MainView: React.FC<MainViewProps> = ({
                                         display: 'block'
                                     }}
                                 />
-                            )}
+                            ) : null}
                         </>
                     )}
                 </div>
@@ -666,6 +665,7 @@ export const MainView: React.FC<MainViewProps> = ({
                     const isLocked = appMode === 'dirigente' && isStandardStamp(stamp.type);
                     const mainBorderColor = isLocked ? 'rgba(198, 12, 48, 0.4)' : '#c60c30';
                     const isOverlayVisible = !(appMode === 'dirigente' && workMode === 'standard' && isStandardStamp(stamp.type));
+                    const headerImageUrl = stampHeaderUrls?.[stamp.type as StampType];
                     
                     return (
                     <div key={stamp.id} className="absolute select-none group stamp-container"
