@@ -1,5 +1,5 @@
 import { PageData, StampData, AppMode } from "../types";
-import { getUniformLabelFontSizeCqw } from "./stampUtils";
+import { StampType, getUniformLabelFontSizeCqw } from "./stampUtils";
 import { PDFDocument, rgb, StandardFonts, PDFName, degrees, PDFPage } from 'pdf-lib';
 
 const sanitizeText = (str: string): string => {
@@ -177,7 +177,7 @@ export const savePdfWithAnnotations = async (
     sourcePdf: File | ArrayBuffer, 
     pages: PageData[], 
     mode: AppMode,
-    doitSignatureUrl?: string
+    stampHeaderUrls?: Record<StampType, string | undefined>
 ): Promise<Uint8Array> => {
   const arrayBuffer = sourcePdf instanceof File ? await sourcePdf.arrayBuffer() : sourcePdf;
   const bufferCopy = arrayBuffer.slice(0);
@@ -661,12 +661,7 @@ const drawStampOnPage = async (
       }
  
       if (isFixedStamp) { // ABILITATO ANCHE PER DIRIGENTE
-          let urlToUse: string | undefined;
-          if (stamp.type === 'DOIT_VE') {
-              urlToUse = doitSignatureUrl;
-          } else {
-              urlToUse = 'https://i.imgur.com/pGhDap2.png';
-          }
+          const urlToUse = stampHeaderUrls?.[stamp.type];
 
           if (urlToUse) {
               try {
