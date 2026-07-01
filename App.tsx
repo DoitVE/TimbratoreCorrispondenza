@@ -11,7 +11,12 @@ import { PageData, DocumentData, StampData, AppMode, WorkMode } from './types';
 import { processSignatureImage } from './services/imageUtils';
 import { createArchiveJSON, parseArchiveJSON } from './services/dataUtils';
 
-const doitSignaturePath = "https://i.imgur.com/jBc5ESo.png";
+const stampHeaderUrls: Record<StampType, string | undefined> = {
+  DOIT_VE: '/stamp-images/doit-ve.png',
+  INGEGNERIA_VE: '/stamp-images/ing-ve.png',
+  UT_NORD: '/stamp-images/ut-nord-ve.png',
+  UT_SUD_VE: undefined
+};
 
 function App() {
   const [appMode, setAppMode] = useState<AppMode>('selection');
@@ -321,14 +326,6 @@ function App() {
 
   const handleCompletion = async () => {
     if (window.confirm("Elaborazione completata! Vuoi generare una mail per notificare?")) {
-        if (appMode === 'segreteria' && workMode === 'archive') {
-            try {
-                const jsonString = await createArchiveJSON(documents);
-                setLastArchiveJson(jsonString);
-            } catch (err) {
-                console.error("Failed to pre-generate JSON for mail", err);
-            }
-        }
         setShowMailModal(true);
     } else {
         resetSession();
@@ -365,7 +362,7 @@ function App() {
       let sourceData: ArrayBuffer | File = doc.file;
       if (doc.pdfBytes) sourceData = doc.pdfBytes;
 
-      const modifiedPdfBytes = await savePdfWithAnnotations(sourceData, doc.pages, appMode, doitSignaturePath);
+      const modifiedPdfBytes = await savePdfWithAnnotations(sourceData, doc.pages, appMode, stampHeaderUrls);
       const blob = new Blob([modifiedPdfBytes.buffer], { type: 'application/pdf' });
       
       if ('showSaveFilePicker' in window) {
@@ -489,7 +486,7 @@ function App() {
       }
   };
 
-  const currentDoc = currentDocIndex !== -1 ? documents[currentDocIndex] : null;
+  const currentDoc = currentDocIndex >= 0 && currentDocIndex < documents.length ? documents[currentDocIndex] : null;
 
   if (appMode === 'selection') {
       return <WelcomeScreen onSelectMode={handleSelectMode} />;
@@ -518,7 +515,7 @@ function App() {
           onUploadSignature={handleUploadSignature}
           activeTool={activeTool}
           onSetActiveTool={setActiveTool}
-          doitSignatureUrl={doitSignaturePath}
+          stampHeaderUrls={stampHeaderUrls}
           workMode={workMode}
           onExportArchive={handleExportArchive}
         />
@@ -536,7 +533,7 @@ function App() {
           workMode={workMode}
           activeTool={activeTool}
           onToolPlace={handleToolPlace}
-          doitSignatureUrl={doitSignaturePath}
+          stampHeaderUrls={stampHeaderUrls}
           onExportArchive={handleExportArchive}
           onPrevDocument={handlePrevDocument}
           currentDocIndex={currentDocIndex}
