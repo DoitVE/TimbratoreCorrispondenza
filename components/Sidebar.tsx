@@ -22,7 +22,7 @@ interface SidebarProps {
   onUploadSignature: (e: React.ChangeEvent<HTMLInputElement>) => void;
   activeTool?: 'none' | 'check' | 'text' | 'signature';
   onSetActiveTool?: (tool: 'none' | 'check' | 'text' | 'signature') => void;
-  stampHeaderUrls?: Record<StampType, string | undefined>;
+  doitSignatureUrl?: string;
   workMode?: WorkMode;
   onExportArchive?: () => void;
 }
@@ -30,10 +30,10 @@ interface SidebarProps {
 interface StampPreviewButtonProps {
   type: StampType;
   onClick: () => void;
-  headerUrl?: string;
+  doitSignatureUrl?: string;
 }
 
-const StampPreviewButton: React.FC<StampPreviewButtonProps> = ({ type, onClick, headerUrl }) => {
+const StampPreviewButton: React.FC<StampPreviewButtonProps> = ({ type, onClick, doitSignatureUrl }) => {
     const def = STAMP_DEFINITIONS[type];
     const dummyStamp = createStamp(type);
     const uniformFontSizeCqw = getUniformLabelFontSizeCqw(dummyStamp.rows);
@@ -85,14 +85,22 @@ const StampPreviewButton: React.FC<StampPreviewButtonProps> = ({ type, onClick, 
 
                     {/* Right Cell (FIRMA) - 25% width - DESTRA */}
                     <div className="w-[25%] h-full bg-transparent flex items-center justify-end relative overflow-hidden">
-                        {headerUrl ? (
+                        {type === 'DOIT_VE' && doitSignatureUrl && (
                             <img 
-                                src={headerUrl} 
+                                src={doitSignatureUrl} 
                                 alt="Firma" 
                                 crossOrigin="anonymous" 
                                 className="absolute right-0 top-0 h-full w-full object-fill pointer-events-none select-none" 
                             />
-                        ) : null}
+                        )}
+                        {['INGEGNERIA_VE', 'UT_NORD', 'UT_SUD_VE'].includes(type) && (
+                            <img 
+                                src={type === 'INGEGNERIA_VE' ? 'https://i.imgur.com/kJuJv58.png' : type === 'UT_NORD' ? 'https://i.imgur.com/cDAkuvP.png' : 'https://i.imgur.com/pGhDap2.png'}
+                                alt="Firma" 
+                                crossOrigin="anonymous" 
+                                className="absolute right-0 top-0 h-full w-full object-fill pointer-events-none select-none z-30" 
+                            />
+                        )}
                     </div>
                 </div>
 
@@ -189,7 +197,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onUploadSignature,
   activeTool,
   onSetActiveTool,
-  stampHeaderUrls,
+  doitSignatureUrl,
   workMode,
   onExportArchive
 }) => {
@@ -303,11 +311,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Seleziona Timbro</h3>
                 <div className="space-y-4">
                     {stampTypes.map(type => (
-                                        <StampPreviewButton 
+                        <StampPreviewButton 
                             key={type} 
                             type={type} 
                             onClick={() => onAddStamp(type)}
-                            headerUrl={stampHeaderUrls?.[type]}
+                            doitSignatureUrl={doitSignatureUrl}
                         />
                     ))}
                 </div>
