@@ -1,5 +1,5 @@
 import { PageData, StampData, AppMode } from "../types";
-import { StampType, getUniformLabelFontSizeCqw } from "./stampUtils";
+import { getUniformLabelFontSizeCqw } from "./stampUtils";
 import { PDFDocument, rgb, StandardFonts, PDFName, degrees, PDFPage } from 'pdf-lib';
 
 const sanitizeText = (str: string): string => {
@@ -177,7 +177,7 @@ export const savePdfWithAnnotations = async (
     sourcePdf: File | ArrayBuffer, 
     pages: PageData[], 
     mode: AppMode,
-    stampHeaderUrls?: Record<StampType, string | undefined>
+    doitSignatureUrl?: string
 ): Promise<Uint8Array> => {
   const arrayBuffer = sourcePdf instanceof File ? await sourcePdf.arrayBuffer() : sourcePdf;
   const bufferCopy = arrayBuffer.slice(0);
@@ -661,7 +661,16 @@ const drawStampOnPage = async (
       }
  
       if (isFixedStamp) { // ABILITATO ANCHE PER DIRIGENTE
-          const urlToUse = stampHeaderUrls?.[stamp.type];
+          let urlToUse: string | undefined;
+          if (stamp.type === 'DOIT_VE') {
+              urlToUse = doitSignatureUrl;
+          } else if (stamp.type === 'INGEGNERIA_VE') {
+              urlToUse = 'https://i.imgur.com/kJuJv58.png';
+          } else if (stamp.type === 'UT_NORD') {
+              urlToUse = 'https://i.imgur.com/cDAkuvP.png';
+          } else {
+              urlToUse = 'https://i.imgur.com/pGhDap2.png';
+          }
 
           if (urlToUse) {
               try {
