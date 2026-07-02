@@ -95,7 +95,7 @@ const StampPreviewButton: React.FC<StampPreviewButtonProps> = ({ type, onClick, 
                         )}
                         {['INGEGNERIA_VE', 'UT_NORD', 'UT_SUD_VE'].includes(type) && (
                             <img 
-                                src={type === 'INGEGNERIA_VE' ? 'https://i.imgur.com/kJuJv58.png' : type === 'UT_NORD' ? 'https://i.imgur.com/cDAkuvP.png' : 'https://i.imgur.com/pGhDap2.png'}
+                                src={type === 'INGEGNERIA_VE' ? '/timbri/ING_VE.png' : type === 'UT_NORD' ? '/timbri/UT_NORD_VE.png' : '/timbri/UT_SUD_VE.png'}
                                 alt="Firma" 
                                 crossOrigin="anonymous" 
                                 className="absolute right-0 top-0 h-full w-full object-fill pointer-events-none select-none z-30" 

@@ -421,7 +421,7 @@ export const MainView: React.FC<MainViewProps> = ({
                             )}
                             {(isStandardStamp(stamp.type) && stamp.type !== 'DOIT_VE') && (
                                 <img 
-                                    src={stamp.type === 'INGEGNERIA_VE' ? 'https://i.imgur.com/kJuJv58.png' : stamp.type === 'UT_NORD' ? 'https://i.imgur.com/cDAkuvP.png' : 'https://i.imgur.com/pGhDap2.png'}
+                                    src={stamp.type === 'INGEGNERIA_VE' ? '/timbri/ING_VE.png' : stamp.type === 'UT_NORD' ? '/timbri/UT_NORD_VE.png' : '/timbri/UT_SUD_VE.png'}
                                     alt="Firma" 
                                     className="absolute right-0 top-0 h-full w-full object-fill pointer-events-none z-30"
                                     style={{ 
