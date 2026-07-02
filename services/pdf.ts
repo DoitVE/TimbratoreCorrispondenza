@@ -24,6 +24,16 @@ const safeDim = (n: any, min = 0.1, fallback = 10): number => {
     return Math.max(min, val);
 };
 
+const formatTimestamp = (date: Date): string => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const day = pad(date.getDate());
+    const month = pad(date.getMonth() + 1);
+    const year = date.getFullYear();
+    const hours = pad(date.getHours());
+    const minutes = pad(date.getMinutes());
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
+};
+
 export const convertPdfToImages = async (input: File | ArrayBuffer): Promise<PageData[]> => {
   const originalBuffer = input instanceof File ? await input.arrayBuffer() : input;
   const bufferCopy = originalBuffer.slice(0);
@@ -182,6 +192,8 @@ export const savePdfWithAnnotations = async (
   const arrayBuffer = sourcePdf instanceof File ? await sourcePdf.arrayBuffer() : sourcePdf;
   const bufferCopy = arrayBuffer.slice(0);
 
+  const timestampLabel = mode === 'dirigente' ? formatTimestamp(new Date()) : undefined;
+
   // 1. Carichiamo il documento originale
   const originalPdf = await PDFDocument.load(bufferCopy, { ignoreEncryption: true });
 
@@ -252,7 +264,8 @@ export const savePdfWithAnnotations = async (
                 doitSignatureUrl,
                 false, // onlyStructure
                 false, // onlyContent
-                true  // onlyHighlighter - ABILITATO ANCHE PER DIRIGENTE (MA GESTITO INTERNAMENTE PER EVITARE MOSAICO)
+                true,  // onlyHighlighter - ABILITATO ANCHE PER DIRIGENTE (MA GESTITO INTERNAMENTE PER EVITARE MOSAICO)
+                timestampLabel
             );
         } catch (e) {
             console.error("Error drawing stamp highlighter on page " + index, e);
@@ -277,7 +290,8 @@ export const savePdfWithAnnotations = async (
                 doitSignatureUrl,
                 true, // onlyStructure - ABILITATO SEMPRE (anche per Dirigente, per stare sopra l'highlighter)
                 false, // onlyContent
-                false // onlyHighlighter
+                false, // onlyHighlighter
+                timestampLabel
             );
         } catch (e) {
             console.error("Error drawing stamp structure on page " + index, e);
@@ -302,7 +316,8 @@ export const savePdfWithAnnotations = async (
                 doitSignatureUrl,
                 false, // onlyStructure
                 true,  // onlyContent
-                false // onlyHighlighter
+                false, // onlyHighlighter
+                timestampLabel
             );
         } catch (e) {
             console.error("Error drawing stamp content on page " + index, e);
@@ -407,7 +422,8 @@ const drawStampOnPage = async (
   doitSignatureUrl?: string,
   onlyStructure: boolean = false,
   onlyContent: boolean = false,
-  onlyHighlighter: boolean = false
+  onlyHighlighter: boolean = false,
+  timestampLabel?: string
 ) => {
   if ((onlyStructure || onlyHighlighter) && (stamp.type === 'SIGNATURE' || stamp.type === 'FREE_CHECK')) {
       return;
@@ -561,6 +577,28 @@ const drawStampOnPage = async (
 
   if (stamp.type === 'SIGNATURE' || stamp.type === 'FREE_CHECK') {
       if (onlyStructure || onlyHighlighter) return;
+  }
+
+  if (timestampLabel && isDirigente && !onlyHighlighter) {
+      const [datePart, timePart] = timestampLabel.split(' ');
+      const timestampFontSize = Math.max(6, visualStampW * 0.045);
+      const labelX = visualStampX + visualStampW * 0.03;
+      const firstLineY = visualStampYBottom + visualStampH - timestampFontSize - (visualStampH * 0.03);
+      const secondLineY = firstLineY - timestampFontSize - 2;
+
+      dTextWithHalo(datePart, labelX, firstLineY, {
+          size: timestampFontSize,
+          font: fontRegular,
+          color: BLACK_COLOR
+      }, 0.4, true, true);
+
+      if (timePart) {
+          dTextWithHalo(timePart, labelX, secondLineY, {
+              size: timestampFontSize,
+              font: fontRegular,
+              color: BLACK_COLOR
+          }, 0.4, true, true);
+      }
   }
 
   const totalUnits = Math.max(5, stamp.rows.length + 2.5);
