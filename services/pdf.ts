@@ -665,11 +665,11 @@ const drawStampOnPage = async (
           if (stamp.type === 'DOIT_VE') {
               urlToUse = doitSignatureUrl;
           } else if (stamp.type === 'INGEGNERIA_VE') {
-              urlToUse = 'https://i.imgur.com/kJuJv58.png';
+              urlToUse = '/timbri/ING_VE.png';
           } else if (stamp.type === 'UT_NORD') {
-              urlToUse = 'https://i.imgur.com/cDAkuvP.png';
+              urlToUse = '/timbri/UT_NORD_VE.png';
           } else {
-              urlToUse = 'https://i.imgur.com/pGhDap2.png';
+              urlToUse = '/timbri/UT_SUD_VE.png';
           }
 
           if (urlToUse) {
