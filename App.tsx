@@ -11,7 +11,7 @@ import { PageData, DocumentData, StampData, AppMode, WorkMode } from './types';
 import { processSignatureImage } from './services/imageUtils';
 import { createArchiveJSON, parseArchiveJSON } from './services/dataUtils';
 
-const doitSignaturePath = "https://i.imgur.com/jBc5ESo.png";
+const doitSignaturePath = "/timbri/DOIT_VE.png";
 
 function App() {
   const [appMode, setAppMode] = useState<AppMode>('selection');
