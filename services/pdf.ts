@@ -1,6 +1,6 @@
 import { PageData, StampData, AppMode } from "../types";
 import { getUniformLabelFontSizeCqw } from "./stampUtils";
-import { PDFDocument, rgb, StandardFonts, PDFName, degrees, PDFPage } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts, PDFName, degrees, PDFPage, PDFOperator, PDFNumber } from 'pdf-lib';
 
 const sanitizeText = (str: string): string => {
   if (!str) return "";
@@ -480,7 +480,14 @@ const drawStampOnPage = async (
       const { x: tx, y: ty, angle } = applyTransform(x, y, 0, 0);
       if ((useHalo || forceHalo) && !forceNoHalo) {
           const haloOptions = { ...options, color: WHITE_COLOR, x: tx, y: ty, rotate: angle };
-          // Disegna l'alone in più direzioni per un effetto più marcato
+          
+          // Disegna l'alone bianco dietro al testo principale.
+          // Avvolgiamo questi disegni in un blocco Artifact (BMC/EMC) in modo che
+          // vengano ignorati dai lettori PDF per la selezione e la copia.
+          pdfPage.pushOperators(
+              PDFOperator.of('BMC', [PDFName.of('Artifact')])
+          );
+          
           const offsets = [
               { dx: -haloWidth, dy: 0 }, { dx: haloWidth, dy: 0 },
               { dx: 0, dy: -haloWidth }, { dx: 0, dy: haloWidth },
@@ -490,7 +497,13 @@ const drawStampOnPage = async (
           offsets.forEach(off => {
               pdfPage.drawText(text, { ...haloOptions, x: tx + off.dx, y: ty + off.dy });
           });
+          
+          pdfPage.pushOperators(
+              PDFOperator.of('EMC')
+          );
       }
+      
+      // Disegna il testo principale sopra l'alone (piena nitidezza e spessore nativo del font, copiabile)
       pdfPage.drawText(text, { ...options, x: tx, y: ty, rotate: angle });
   };
 
@@ -545,7 +558,7 @@ const drawStampOnPage = async (
       const safeT = sanitizeText(text).toUpperCase();
       if (!safeT) return;
 
-      const fontSize = Math.max(7.5, w * 0.055);
+      const fontSize = Math.max(9.5, w * 0.075);
       const lineH = fontSize * 1.35;
       const lines = breakTextIntoLines(safeT, fontSize, w * 0.94, font);
 
@@ -558,7 +571,7 @@ const drawStampOnPage = async (
           const lineW = font.widthOfTextAtSize(line, fontSize);
           const lineX = isCentered ? x + (w - lineW) / 2 : x + (w * 0.03);
           
-          if (onlyHighlighter) {
+          if (onlyHighlighter && !forceTransparent) {
               dRect(lineX - hP, lineY - vP, lineW + hP * 2, fontSize + vP * 2, WHITE_COLOR);
           }
           
