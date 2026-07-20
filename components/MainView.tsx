@@ -269,7 +269,7 @@ export const MainView: React.FC<MainViewProps> = ({
                         aria-hidden="true"
                         className="absolute top-0 left-0 w-full h-full p-2 font-sans font-normal leading-tight text-center pointer-events-none z-[105]"
                         style={{ 
-                            fontSize: `5.5cqw`, 
+                            fontSize: `7.5cqw`, 
                             whiteSpace: 'pre-wrap',
                             wordBreak: 'break-word',
                             color: 'transparent',
@@ -300,7 +300,7 @@ export const MainView: React.FC<MainViewProps> = ({
                     className="resize-none outline-none text-black font-sans font-normal leading-tight text-center w-full block p-2 overflow-visible relative z-[110]"
                     placeholder={hideStructureOnly ? "" : "SCRIVI QUI..."}
                     style={{ 
-                        fontSize: `5.5cqw`, 
+                        fontSize: `7.5cqw`, 
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
                         height: 'auto',
@@ -577,7 +577,7 @@ export const MainView: React.FC<MainViewProps> = ({
                     onMouseDown={(e) => e.stopPropagation()} 
                     className="w-full resize-none outline-none text-black font-sans font-normal leading-tight text-center relative z-[106] p-2 block overflow-visible"
                     style={{ 
-                        fontSize: `5.5cqw`, 
+                        fontSize: `7.5cqw`, 
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
                         height: 'auto',
