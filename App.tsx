@@ -332,6 +332,36 @@ function App() {
     }
   };
 
+  const writeWithTimeout = async (handle: any, blob: Blob, timeoutMs: number): Promise<void> => {
+    let writable: any = null;
+    let timeoutId: any;
+
+    const timeoutPromise = new Promise<void>((_, reject) => {
+      timeoutId = setTimeout(async () => {
+        if (writable) {
+          try {
+            await writable.abort();
+          } catch (abortErr) {
+            console.warn("Failed to abort stream on timeout", abortErr);
+          }
+        }
+        reject(new Error("TIMEOUT_LOCKED"));
+      }, timeoutMs);
+    });
+
+    const writePromise = (async () => {
+      writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+    })();
+
+    try {
+      await Promise.race([writePromise, timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+
   const handleNextDocument = async () => {
     if (currentDocIndex === -1 || !documents[currentDocIndex]) return;
     const doc = documents[currentDocIndex];
@@ -386,13 +416,15 @@ function App() {
 
         if (handle) {
           try {
-            const writable = await handle.createWritable();
-            await writable.write(blob);
-            await writable.close();
+            await writeWithTimeout(handle, blob, 5000); // 5 secondi di timeout
             saveSuccess = true;
           } catch (e: any) {
-            console.error("Dettaglio errore scrittura (blocco file):", e);
-            alert("⚠️ IMPOSSIBILE SALVARE IL FILE\n\nNon riesco a scrivere il documento '" + doc.name + "'.\n\nQuasi certamente il file è aperto in Adobe Acrobat o un altro programma.\n\nPER FAVORE:\n1. Chiudi il PDF nel lettore esterno (es. Adobe Acrobat).\n2. Riprova a premere il pulsante di salvataggio/finalizzazione.");
+            console.error("Dettaglio errore scrittura:", e);
+            if (e.message === "TIMEOUT_LOCKED") {
+              alert("⚠️ L'operazione di salvataggio sta impiegando troppo tempo.\n\nControlla che il documento '" + doc.name + "' non sia aperto in un programma esterno alla web app (come Adobe Reader).\n\nPER FAVORE: Chiudi il programma esterno e riprova a salvare.");
+            } else {
+              alert("⚠️ IMPOSSIBILE SALVARE IL FILE\n\nNon riesco a scrivere il documento '" + doc.name + "'.\n\nQuasi certamente il file è aperto in Adobe Acrobat o un altro programma.\n\nPER FAVORE:\n1. Chiudi il PDF nel lettore esterno (es. Adobe Acrobat).\n2. Riprova a premere il pulsante di salvataggio/finalizzazione.");
+            }
           }
         }
       } else {
