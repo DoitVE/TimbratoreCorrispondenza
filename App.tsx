@@ -149,78 +149,75 @@ function App() {
           const pdfBytes = doc.pdfBytes || await doc.file.arrayBuffer();
           
           const renderedPages = await convertPdfToImagesProgressive(pdfBytes, (page, idx) => {
-            // Get the MOST RECENT stamps from the current state to avoid overwriting user work
-            setDocuments(prevDocs => {
-              const newDocs = [...prevDocs];
-              const currentDoc = { ...newDocs[currentDocIndex] };
-              const currentPages = [...currentDoc.pages];
-              const existingPage = currentPages[idx];
-              
-              currentPages[idx] = {
-                ...page,
-                stamps: (existingPage?.stamps && existingPage.stamps.length > 0) ? existingPage.stamps : page.stamps,
-                userAnnotation: existingPage?.userAnnotation || page.userAnnotation
-              };
-              
-              currentDoc.pages = currentPages;
-              newDocs[currentDocIndex] = currentDoc;
-              return newDocs;
-            });
-          });
+             setDocuments(prevDocs => {
+               if (currentDocIndex < 0 || currentDocIndex >= prevDocs.length) return prevDocs;
+               const newDocs = [...prevDocs];
+               const currentDoc = { ...newDocs[currentDocIndex] };
+               if (!currentDoc || !currentDoc.pages) return prevDocs;
+               const currentPages = [...currentDoc.pages];
+               const existingPage = currentPages[idx];
+               
+               currentPages[idx] = {
+                 ...page,
+                 stamps: (existingPage?.stamps && existingPage.stamps.length > 0) ? existingPage.stamps : page.stamps,
+                 userAnnotation: existingPage?.userAnnotation || page.userAnnotation
+               };
+               
+               currentDoc.pages = currentPages;
+               newDocs[currentDocIndex] = currentDoc;
+               return newDocs;
+             });
+           });
  
-          // Final merge: Ensure we keep any stamps added during the entire rendering process
-          setDocuments(prevDocs => {
-            const newDocs = [...prevDocs];
-            const currentDoc = { ...newDocs[currentDocIndex] };
-            
-            let mergedPages = renderedPages.map((newPage, idx) => {
-              const existing = currentDoc.pages[idx];
-              return {
-                ...newPage,
-                stamps: (existing?.stamps && existing.stamps.length > 0) ? existing.stamps : newPage.stamps,
-                userAnnotation: existing?.userAnnotation || newPage.userAnnotation
-              };
-            });
-            
-            currentDoc.pages = mergedPages;
-            currentDoc.status = originalStatus === 'pending' ? 'ready' : originalStatus;
-            currentDoc.pdfBytes = pdfBytes;
-            newDocs[currentDocIndex] = currentDoc;
-            return newDocs;
-          });
+           // Final merge: Ensure we keep any stamps added during the entire rendering process
+           setDocuments(prevDocs => {
+             if (currentDocIndex < 0 || currentDocIndex >= prevDocs.length) return prevDocs;
+             const newDocs = [...prevDocs];
+             const currentDoc = { ...newDocs[currentDocIndex] };
+             if (!currentDoc || !currentDoc.pages) return prevDocs;
+             
+             let mergedPages = renderedPages.map((newPage, idx) => {
+               const existing = currentDoc.pages[idx];
+               return {
+                 ...newPage,
+                 stamps: (existing?.stamps && existing.stamps.length > 0) ? existing.stamps : newPage.stamps,
+                 userAnnotation: existing?.userAnnotation || newPage.userAnnotation
+               };
+             });
+             
+             currentDoc.pages = mergedPages;
+             currentDoc.status = originalStatus === 'pending' ? 'ready' : originalStatus;
+             currentDoc.pdfBytes = pdfBytes;
+             newDocs[currentDocIndex] = currentDoc;
+             return newDocs;
+           });
 
           // Check for extracted stamps only if we don't have any yet
           const checkExtraction = async () => {
-            const currentDocs = documents; // Note: this is a bit stale but okay for the check
-            const hasStamps = renderedPages.some((_, idx) => {
-               const p = currentDocs[currentDocIndex]?.pages[idx];
-               return p && p.stamps && p.stamps.length > 0;
-            });
-
-            if (!hasStamps) {
-              const extractedStamps = await extractStampDataFromPdf(pdfBytes);
-              if (extractedStamps) {
-                setDocuments(prevDocs => {
-                  const newDocs = [...prevDocs];
-                  const currentDoc = { ...newDocs[currentDocIndex] };
-                  const newPages = [...currentDoc.pages];
-                  Object.keys(extractedStamps).forEach(pageIdx => {
-                    const idx = Number(pageIdx);
-                    // FIX: Apply extracted stamps ONLY if there are no existing stamps (user or otherwise)
-                    // This prevents overwriting user actions that happened during processing
-                    if (newPages[idx]) {
-                        const currentStamps = newPages[idx].stamps;
-                        if (!currentStamps || currentStamps.length === 0) {
-                            newPages[idx].stamps = extractedStamps[idx];
-                        }
-                    }
-                  });
-                  currentDoc.pages = newPages;
-                  newDocs[currentDocIndex] = currentDoc;
-                  return newDocs;
-                });
-              }
-            }
+             const extractedStamps = await extractStampDataFromPdf(pdfBytes);
+             if (extractedStamps) {
+               setDocuments(prevDocs => {
+                 if (currentDocIndex < 0 || currentDocIndex >= prevDocs.length) return prevDocs;
+                 const newDocs = [...prevDocs];
+                 const currentDoc = { ...newDocs[currentDocIndex] };
+                 if (!currentDoc || !currentDoc.pages) return prevDocs;
+                 const newPages = [...currentDoc.pages];
+                 Object.keys(extractedStamps).forEach(pageIdx => {
+                   const idx = Number(pageIdx);
+                   // FIX: Apply extracted stamps ONLY if there are no existing stamps (user or otherwise)
+                   // This prevents overwriting user actions that happened during processing
+                   if (newPages[idx]) {
+                       const currentStamps = newPages[idx].stamps;
+                       if (!currentStamps || currentStamps.length === 0) {
+                           newPages[idx].stamps = extractedStamps[idx];
+                       }
+                   }
+                 });
+                 currentDoc.pages = newPages;
+                 newDocs[currentDocIndex] = currentDoc;
+                 return newDocs;
+               });
+             }
           };
           checkExtraction();
 
@@ -369,26 +366,33 @@ function App() {
       const blob = new Blob([modifiedPdfBytes.buffer], { type: 'application/pdf' });
       
       if ('showSaveFilePicker' in window) {
+        let handle: any = null;
         try {
-          const handle = await (window as any).showSaveFilePicker({
+          handle = await (window as any).showSaveFilePicker({
             suggestedName: doc.name,
             types: [{
               description: 'PDF',
               accept: { 'application/pdf': ['.pdf'] }
             }],
           });
-          
-          const writable = await handle.createWritable();
-          await writable.write(blob);
-          await writable.close();
-          saveSuccess = true;
         } catch (e: any) {
-          console.error("Dettaglio errore salvataggio:", e);
+          console.error("Errore apertura file picker:", e);
           if (e.name === 'AbortError') {
             userCancelled = true;
           } else {
-            // ALERT IMMEDIATO: Se non è un annullamento, avvisiamo subito l'utente
-            alert("⚠️ IMPOSSIBILE SALVARE IL FILE\n\nNon riesco a scrivere il documento '" + doc.name + "'.\n\nQuasi certamente il file è aperto in Adobe Acrobat o un altro programma.\n\nPER FAVORE: Chiudi il PDF esternamente e poi riprova a premere Avanti.");
+            alert("Errore durante la scelta del file: " + (e.message || e));
+          }
+        }
+
+        if (handle) {
+          try {
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            saveSuccess = true;
+          } catch (e: any) {
+            console.error("Dettaglio errore scrittura (blocco file):", e);
+            alert("⚠️ IMPOSSIBILE SALVARE IL FILE\n\nNon riesco a scrivere il documento '" + doc.name + "'.\n\nQuasi certamente il file è aperto in Adobe Acrobat o un altro programma.\n\nPER FAVORE:\n1. Chiudi il PDF nel lettore esterno (es. Adobe Acrobat).\n2. Riprova a premere il pulsante di salvataggio/finalizzazione.");
           }
         }
       } else {

@@ -11,7 +11,21 @@ const sanitizeText = (str: string): string => {
     .replace(/\u2013/g, "-") 
     .replace(/\u2014/g, "--") 
     .replace(/\u2026/g, "...") 
-    .replace(/[^\x20-\x7FàèéìòùÀÈÉÌÒÙçÇ€\r\n]/g, ""); 
+    // Mappa i caratteri accentati e speciali a standard ASCII
+    .replace(/[àáâãäå]/g, "a")
+    .replace(/[èéêë]/g, "e")
+    .replace(/[ìíîï]/g, "i")
+    .replace(/[òóôõöø]/g, "o")
+    .replace(/[ùúûü]/g, "u")
+    .replace(/[ÀÁÂÃÄÅ]/g, "A")
+    .replace(/[ÈÉÊË]/g, "E")
+    .replace(/[ÌÍÎÏ]/g, "I")
+    .replace(/[ÒÓÔÕÖØ]/g, "O")
+    .replace(/[ÙÚÛÜ]/g, "U")
+    .replace(/[ç]/g, "c")
+    .replace(/[Ç]/g, "C")
+    .replace(/[€]/g, "EUR")
+    .replace(/[^\x20-\x7F\r\n]/g, ""); 
 };
 
 const safeNum = (n: any, fallback = 0): number => {
@@ -344,12 +358,30 @@ export const savePdfWithAnnotations = async (
       }
       
       // PULIZIA TOTALE DEI METADATI (Richiesta specifica: "TOGLIERE TUTTI I MARKER")
-      pdfDoc.setTitle('');
-      pdfDoc.setAuthor('');
-      pdfDoc.setSubject('');
-      pdfDoc.setKeywords([]);
-      pdfDoc.setProducer('');
-      pdfDoc.setCreator('');
+      try {
+          const infoDict = (pdfDoc as any).getInfoDict();
+          infoDict.delete(PDFName.of('Subject'));
+          infoDict.delete(PDFName.of('Title'));
+          infoDict.delete(PDFName.of('Author'));
+          infoDict.delete(PDFName.of('Keywords'));
+          infoDict.delete(PDFName.of('Creator'));
+          infoDict.delete(PDFName.of('Producer'));
+      } catch (e) {
+          // Fallback se getInfoDict o delete non sono supportati
+          pdfDoc.setTitle('');
+          pdfDoc.setAuthor('');
+          pdfDoc.setSubject('');
+          pdfDoc.setKeywords([]);
+          pdfDoc.setProducer('');
+          pdfDoc.setCreator('');
+      }
+
+      try {
+          const catalog = pdfDoc.catalog;
+          if (catalog) {
+              catalog.delete(PDFName.of('Metadata'));
+          }
+      } catch (e) {}
   }
 
   return await pdfDoc.save();
@@ -485,7 +517,7 @@ const drawStampOnPage = async (
           // Avvolgiamo questi disegni in un blocco Artifact (BMC/EMC) in modo che
           // vengano ignorati dai lettori PDF per la selezione e la copia.
           pdfPage.pushOperators(
-              PDFOperator.of('BMC', [PDFName.of('Artifact')])
+              PDFOperator.of('BMC' as any, [PDFName.of('Artifact')])
           );
           
           const offsets = [
@@ -499,7 +531,7 @@ const drawStampOnPage = async (
           });
           
           pdfPage.pushOperators(
-              PDFOperator.of('EMC')
+              PDFOperator.of('EMC' as any)
           );
       }
       
@@ -586,10 +618,6 @@ const drawStampOnPage = async (
       const topY = visualStampYBottom + visualStampH;
       drawHighlightedText(stamp.notes, visualStampX, topY, visualStampW, fontRegular, BLACK_COLOR, true, stamp.isTransparent);
       return;
-  }
-
-  if (stamp.type === 'SIGNATURE' || stamp.type === 'FREE_CHECK') {
-      if (onlyStructure || onlyHighlighter) return;
   }
 
   if (timestampLabel && isDirigente && !onlyHighlighter) {
