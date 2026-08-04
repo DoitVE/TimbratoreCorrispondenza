@@ -523,32 +523,6 @@ const drawStampOnPage = async (
 
   const dTextWithHalo = (text: string, x: number, y: number, options: any, haloWidth = 0.6, forceNoHalo = false, forceHalo = false) => {
       const { x: tx, y: ty, angle } = applyTransform(x, y, 0, 0);
-      if ((useHalo || forceHalo) && !forceNoHalo) {
-          const haloOptions = { ...options, color: WHITE_COLOR, x: tx, y: ty, rotate: angle };
-          
-          // Disegna l'alone bianco dietro al testo principale.
-          // Avvolgiamo questi disegni in un blocco Artifact (BMC/EMC) in modo che
-          // vengano ignorati dai lettori PDF per la selezione e la copia.
-          pdfPage.pushOperators(
-              PDFOperator.of('BMC' as any, [PDFName.of('Artifact')])
-          );
-          
-          const offsets = [
-              { dx: -haloWidth, dy: 0 }, { dx: haloWidth, dy: 0 },
-              { dx: 0, dy: -haloWidth }, { dx: 0, dy: haloWidth },
-              { dx: -haloWidth, dy: -haloWidth }, { dx: haloWidth, dy: haloWidth },
-              { dx: -haloWidth, dy: haloWidth }, { dx: haloWidth, dy: -haloWidth }
-          ];
-          offsets.forEach(off => {
-              pdfPage.drawText(text, { ...haloOptions, x: tx + off.dx, y: ty + off.dy });
-          });
-          
-          pdfPage.pushOperators(
-              PDFOperator.of('EMC' as any)
-          );
-      }
-      
-      // Disegna il testo principale sopra l'alone (piena nitidezza e spessore nativo del font, copiabile)
       pdfPage.drawText(text, { ...options, x: tx, y: ty, rotate: angle });
   };
 
