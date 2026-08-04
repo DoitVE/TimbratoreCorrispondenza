@@ -1,6 +1,7 @@
 import { PageData, StampData, AppMode } from "../types";
 import { getUniformLabelFontSizeCqw } from "./stampUtils";
 import { PDFDocument, rgb, StandardFonts, PDFName, degrees, PDFPage, PDFOperator, PDFNumber } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 
 const sanitizeText = (str: string): string => {
   if (!str) return "";
@@ -224,6 +225,7 @@ export const savePdfWithAnnotations = async (
   
   // 2. Creiamo un NUOVO documento vergine che farà da base
   const pdfDoc = await PDFDocument.create();
+  pdfDoc.registerFontkit(fontkit);
 
   // 3. Copiamo tutte le pagine dall'originale al nuovo documento (Embedding)
   //    Questa operazione "stampa" digitalmente il contenuto, risolvendo rotazioni e glitch.
@@ -234,8 +236,19 @@ export const savePdfWithAnnotations = async (
       pdfDoc.addPage(page);
   });
   
-  const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const helveticaRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  let helveticaBold: any;
+  let helveticaRegular: any;
+
+  try {
+      const fontBoldBytes = await fetch('/fonts/Roboto-Bold.ttf').then(res => res.arrayBuffer());
+      const fontRegularBytes = await fetch('/fonts/Roboto-Regular.ttf').then(res => res.arrayBuffer());
+      helveticaBold = await pdfDoc.embedFont(fontBoldBytes);
+      helveticaRegular = await pdfDoc.embedFont(fontRegularBytes);
+  } catch (error) {
+      console.warn("Failed to load Roboto fonts, falling back to Helvetica", error);
+      helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      helveticaRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  }
 
   const pdfPages = pdfDoc.getPages();
   const metaPayload: Record<number, StampData[]> = {};
