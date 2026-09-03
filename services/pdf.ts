@@ -561,7 +561,7 @@ const drawStampOnPage = async (
   }
 
   const drawHighlightedText = (text: string, x: number, y: number, w: number, font: any, color: any, isCentered = true, forceTransparent = false) => {
-      const safeT = sanitizeText(text).toUpperCase();
+      const safeT = sanitizeText(text);
       if (!safeT) return;
 
       const fontSize = Math.max(9.5, w * 0.075);
