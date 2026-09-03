@@ -617,32 +617,45 @@ export const MainView: React.FC<MainViewProps> = ({
                 </div>
             ))}
 
-            <div className={`notes-area p-0 relative overflow-visible z-[105] flex flex-col justify-center`}
+            <div className={`notes-area p-0 relative overflow-visible z-[105] flex flex-col justify-start items-center`}
                  style={{ 
-                     height: `${((totalUnits - stamp.rows.length - 1.25) / totalUnits) * 100}%` 
+                     minHeight: `${((totalUnits - stamp.rows.length - 1.25) / totalUnits) * 100}%`,
+                     height: 'auto' 
                  }}>
                 {/* Placeholder "NOTE" Grigio Chiarissimo */}
-                <div className="absolute inset-0 bg-[#f9f9f9] flex items-center justify-center pointer-events-none z-[100] border-t-0"
-                     style={{ marginTop: '-1px' }}>
-                    <span className="text-gray-300 italic font-medium select-none uppercase" style={{ fontSize: '4.5cqw', letterSpacing: '0.1em' }}>
-                        Note
-                    </span>
-                </div>
+                {!stamp.notes && (
+                    <div className="absolute inset-0 bg-[#f9f9f9] flex items-center justify-center pointer-events-none z-[100] border-t-0"
+                         style={{ marginTop: '-1px' }}>
+                        <span className="text-gray-300 italic font-medium select-none uppercase" style={{ fontSize: '4.5cqw', letterSpacing: '0.1em' }}>
+                            Note
+                        </span>
+                    </div>
+                )}
 
                 <textarea 
                     value={stamp.notes}
+                    ref={(el) => {
+                        if (el) {
+                            el.style.height = 'auto';
+                            el.style.height = `${el.scrollHeight}px`;
+                        }
+                    }}
                     onFocus={() => setFocusedStampId(stamp.id)}
                     onBlur={() => setFocusedStampId(null)}
                     onChange={(e) => {
                         handleNotesChange(pageIndex, stamp, e.target.value);
+                        e.target.style.height = 'auto';
+                        e.target.style.height = `${e.target.scrollHeight}px`;
                     }}
                     onPointerDown={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()} 
-                    className="w-full h-full resize-none outline-none text-black font-sans font-normal leading-tight text-center relative z-[106] p-1 block overflow-hidden"
+                    className="w-full resize-none outline-none text-black font-sans font-normal leading-tight text-center relative z-[106] p-1 block overflow-visible"
                     style={{ 
                         fontSize: `7.5cqw`, 
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
+                        minHeight: '100%',
+                        height: 'auto',
                         textShadow: EXTRA_THICK_HALO,
                         backgroundColor: stamp.notes ? 'white' : 'transparent',
                         marginTop: '-1px', 
