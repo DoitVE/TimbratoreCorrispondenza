@@ -234,18 +234,48 @@ export const MainView: React.FC<MainViewProps> = ({
     }
   };
 
-  const toggleTextCase = (pageIndex: number, stamp: StampData) => {
-    const newMode = textCaseMode === 'uppercase' ? 'lowercase' : 'uppercase';
-    setTextCaseMode(newMode);
-    if (stamp.notes) {
-      const updatedNotes = newMode === 'uppercase' ? stamp.notes.toUpperCase() : stamp.notes.toLowerCase();
-      onUpdateStamp(pageIndex, { ...stamp, notes: updatedNotes });
+  const toggleTextCase = () => {
+    setTextCaseMode(prev => prev === 'uppercase' ? 'lowercase' : 'uppercase');
+  };
+
+  const applyUppercaseToDiff = (prev: string, next: string): string => {
+    if (!prev) return next.toUpperCase();
+    if (next.length <= prev.length) {
+      let start = 0;
+      while (start < next.length && start < prev.length && next[start] === prev[start]) {
+        start++;
+      }
+      let endNext = next.length - 1;
+      let endPrev = prev.length - 1;
+      while (endNext >= start && endPrev >= start && next[endNext] === prev[endPrev]) {
+        endNext--;
+        endPrev--;
+      }
+      if (start <= endNext) {
+        const inserted = next.slice(start, endNext + 1).toUpperCase();
+        return next.slice(0, start) + inserted + next.slice(endNext + 1);
+      }
+      return next;
+    } else {
+      let start = 0;
+      while (start < prev.length && next[start] === prev[start]) {
+        start++;
+      }
+      let endNext = next.length - 1;
+      let endPrev = prev.length - 1;
+      while (endPrev >= start && next[endNext] === prev[endPrev]) {
+        endNext--;
+        endPrev--;
+      }
+      const inserted = next.slice(start, endNext + 1).toUpperCase();
+      return next.slice(0, start) + inserted + next.slice(endNext + 1);
     }
   };
 
   const handleNotesChange = (pageIndex: number, stamp: StampData, val: string) => {
     if (val === undefined || val === null) return;
-    const transformed = textCaseMode === 'uppercase' ? val.toUpperCase() : val.toLowerCase();
+    const prev = stamp.notes || '';
+    const transformed = textCaseMode === 'uppercase' ? applyUppercaseToDiff(prev, val) : val;
     onUpdateStamp(pageIndex, { ...stamp, notes: transformed });
   };
 
@@ -335,10 +365,10 @@ export const MainView: React.FC<MainViewProps> = ({
                         onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
                         onClick={(e) => {
                             e.stopPropagation();
-                            toggleTextCase(pageIndex, stamp);
+                            toggleTextCase();
                         }}
-                        className="absolute top-1 right-1 bg-gray-800 hover:bg-black text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 rounded shadow z-[125] cursor-pointer transition-colors select-none tracking-wider border border-gray-600/40"
-                        title={textCaseMode === 'uppercase' ? "Passa a minuscolo" : "Passa a maiuscolo"}
+                        className="absolute top-0 right-full mr-1.5 bg-gray-800 hover:bg-black text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 rounded shadow-md z-[200] cursor-pointer transition-colors select-none tracking-wider border border-gray-600/40 whitespace-nowrap"
+                        title={textCaseMode === 'uppercase' ? "Passa a minuscolo (tastiera)" : "Passa a maiuscolo forzato"}
                     >
                         {textCaseMode === 'uppercase' ? 'Aa' : 'aA'}
                     </button>
@@ -587,7 +617,7 @@ export const MainView: React.FC<MainViewProps> = ({
                 </div>
             ))}
 
-            <div className={`notes-area p-0 relative overflow-hidden z-[105] flex flex-col justify-center`}
+            <div className={`notes-area p-0 relative overflow-visible z-[105] flex flex-col justify-center`}
                  style={{ 
                      height: `${((totalUnits - stamp.rows.length - 1.25) / totalUnits) * 100}%` 
                  }}>
@@ -627,10 +657,10 @@ export const MainView: React.FC<MainViewProps> = ({
                         onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
                         onClick={(e) => {
                             e.stopPropagation();
-                            toggleTextCase(pageIndex, stamp);
+                            toggleTextCase();
                         }}
-                        className="absolute top-1 right-1 bg-gray-800 hover:bg-black text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 rounded shadow z-[125] cursor-pointer transition-colors select-none tracking-wider border border-gray-600/40"
-                        title={textCaseMode === 'uppercase' ? "Passa a minuscolo" : "Passa a maiuscolo"}
+                        className="absolute top-0 right-full mr-1.5 bg-gray-800 hover:bg-black text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 rounded shadow-md z-[200] cursor-pointer transition-colors select-none tracking-wider border border-gray-600/40 whitespace-nowrap"
+                        title={textCaseMode === 'uppercase' ? "Passa a minuscolo (tastiera)" : "Passa a maiuscolo forzato"}
                     >
                         {textCaseMode === 'uppercase' ? 'Aa' : 'aA'}
                     </button>
