@@ -16,7 +16,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onSelectMode }) =>
       {/* Logo Area */}
       <div className="mb-4 flex flex-col items-center animate-fade-in-up">
         <img 
-          src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/7c/Rete_Ferroviaria_Italiana_logo.svg/960px-Rete_Ferroviaria_Italiana_logo.svg.png" 
+          src="/rfi_logo.svg" 
           alt="Rete Ferroviaria Italiana" 
           className="h-24 md:h-32 w-auto object-contain mb-6"
         />

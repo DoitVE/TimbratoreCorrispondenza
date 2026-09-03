@@ -15,7 +15,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onGoHome }) => 
         className="flex items-center shrink-0 w-auto md:w-1/4 md:min-w-[120px] cursor-pointer hover:opacity-80 transition-opacity"
       >
         <img 
-          src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/7c/Rete_Ferroviaria_Italiana_logo.svg/960px-Rete_Ferroviaria_Italiana_logo.svg.png" 
+          src="/rfi_logo.svg" 
           alt="Rete Ferroviaria Italiana" 
           className="h-6 md:h-12 w-auto object-contain pointer-events-none"
         />
