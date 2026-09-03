@@ -53,6 +53,8 @@ export const MainView: React.FC<MainViewProps> = ({
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [initialDims, setInitialDims, getInitialDims] = useGetState({ x: 0, y: 0, width: 0, height: 0 });
   const [focusLastAdded, setFocusLastAdded] = useState(false);
+  const [textCaseMode, setTextCaseMode] = useState<'uppercase' | 'lowercase'>('uppercase');
+  const [focusedStampId, setFocusedStampId] = useState<string | null>(null);
   const rafScheduledRef = useRef(false);
   const pendingMoveRef = useRef<{ x: number; y: number } | null>(null);
   
@@ -232,9 +234,19 @@ export const MainView: React.FC<MainViewProps> = ({
     }
   };
 
+  const toggleTextCase = (pageIndex: number, stamp: StampData) => {
+    const newMode = textCaseMode === 'uppercase' ? 'lowercase' : 'uppercase';
+    setTextCaseMode(newMode);
+    if (stamp.notes) {
+      const updatedNotes = newMode === 'uppercase' ? stamp.notes.toUpperCase() : stamp.notes.toLowerCase();
+      onUpdateStamp(pageIndex, { ...stamp, notes: updatedNotes });
+    }
+  };
+
   const handleNotesChange = (pageIndex: number, stamp: StampData, val: string) => {
     if (val === undefined || val === null) return;
-    onUpdateStamp(pageIndex, { ...stamp, notes: val.toUpperCase() });
+    const transformed = textCaseMode === 'uppercase' ? val.toUpperCase() : val.toLowerCase();
+    onUpdateStamp(pageIndex, { ...stamp, notes: transformed });
   };
 
   const renderOverlayContent = (pageIndex: number, stamp: StampData) => {
@@ -290,6 +302,8 @@ export const MainView: React.FC<MainViewProps> = ({
                  <textarea 
                     id={`textarea-${stamp.id}`}
                     value={stamp.notes}
+                    onFocus={() => setFocusedStampId(stamp.id)}
+                    onBlur={() => setFocusedStampId(null)}
                     onChange={(e) => {
                         handleNotesChange(pageIndex, stamp, e.target.value);
                         e.target.style.height = 'auto';
@@ -313,6 +327,22 @@ export const MainView: React.FC<MainViewProps> = ({
                         color: 'black'
                     }}
                 />
+
+                {focusedStampId === stamp.id && (
+                    <button
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            toggleTextCase(pageIndex, stamp);
+                        }}
+                        className="absolute top-1 right-1 bg-gray-800 hover:bg-black text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 rounded shadow z-[125] cursor-pointer transition-colors select-none tracking-wider border border-gray-600/40"
+                        title={textCaseMode === 'uppercase' ? "Passa a minuscolo" : "Passa a maiuscolo"}
+                    >
+                        {textCaseMode === 'uppercase' ? 'Aa' : 'aA'}
+                    </button>
+                )}
             </div>
         );
     }
@@ -557,7 +587,10 @@ export const MainView: React.FC<MainViewProps> = ({
                 </div>
             ))}
 
-            <div className={`flex-1 notes-area p-0 relative overflow-visible z-[105] flex flex-col pt-0.5`}>
+            <div className={`notes-area p-0 relative overflow-hidden z-[105] flex flex-col justify-center`}
+                 style={{ 
+                     height: `${((totalUnits - stamp.rows.length - 1.25) / totalUnits) * 100}%` 
+                 }}>
                 {/* Placeholder "NOTE" Grigio Chiarissimo */}
                 <div className="absolute inset-0 bg-[#f9f9f9] flex items-center justify-center pointer-events-none z-[100] border-t-0"
                      style={{ marginTop: '-1px' }}>
@@ -568,25 +601,40 @@ export const MainView: React.FC<MainViewProps> = ({
 
                 <textarea 
                     value={stamp.notes}
+                    onFocus={() => setFocusedStampId(stamp.id)}
+                    onBlur={() => setFocusedStampId(null)}
                     onChange={(e) => {
                         handleNotesChange(pageIndex, stamp, e.target.value);
-                        e.target.style.height = 'auto';
-                        e.target.style.height = e.target.scrollHeight + 'px';
                     }}
                     onPointerDown={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()} 
-                    className="w-full resize-none outline-none text-black font-sans font-normal leading-tight text-center relative z-[106] p-2 block overflow-visible"
+                    className="w-full h-full resize-none outline-none text-black font-sans font-normal leading-tight text-center relative z-[106] p-1 block overflow-hidden"
                     style={{ 
                         fontSize: `7.5cqw`, 
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
-                        height: 'auto',
                         textShadow: EXTRA_THICK_HALO,
                         backgroundColor: stamp.notes ? 'white' : 'transparent',
                         marginTop: '-1px', 
                         boxShadow: stamp.notes ? '0 1px 0 0 white' : 'none' 
                     }}
                 />
+
+                {focusedStampId === stamp.id && (
+                    <button
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            toggleTextCase(pageIndex, stamp);
+                        }}
+                        className="absolute top-1 right-1 bg-gray-800 hover:bg-black text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 rounded shadow z-[125] cursor-pointer transition-colors select-none tracking-wider border border-gray-600/40"
+                        title={textCaseMode === 'uppercase' ? "Passa a minuscolo" : "Passa a maiuscolo"}
+                    >
+                        {textCaseMode === 'uppercase' ? 'Aa' : 'aA'}
+                    </button>
+                )}
             </div>
         </div>
     );
@@ -700,12 +748,12 @@ export const MainView: React.FC<MainViewProps> = ({
                 )}
 
                 {!isLocked && (
-                        <div className="absolute cursor-nwse-resize z-[110] flex items-end justify-end p-0.5" 
-                             style={{ bottom: '1.5px', right: '1.5px' }}
-                             onPointerDown={(e) => handlePointerDownResize(e, index, stamp, isLocked)}>
-                            <div className="w-3 h-3 bg-[#c60c30]" style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 100%)' }}></div>
-                        </div>
-                        )}
+                    <div className="absolute cursor-nwse-resize z-[170] flex items-end justify-end p-0" 
+                         style={{ bottom: '0px', right: '0px' }}
+                         onPointerDown={(e) => handlePointerDownResize(e, index, stamp, isLocked)}>
+                        <div className="w-3.5 h-3.5 bg-[#c60c30]" style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 100%)' }}></div>
+                    </div>
+                )}
                     </div>
                 )})}
             </div>
