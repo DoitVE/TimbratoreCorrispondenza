@@ -38,10 +38,10 @@ function App() {
   }, []);
 
   const handleGoHome = useCallback(() => {
-      const shouldAbort = window.confirm(
-        "ATTENZIONE:\nTornando alla Home, l'elaborazione corrente verrà INTERROTTA e tutti i dati non salvati andranno PERSI definitivamente.\n\nVuoi abortire l'operazione?"
+      const shouldCancel = window.confirm(
+        "ATTENZIONE:\nTornando alla Home, l'elaborazione corrente verrà INTERROTTA e tutti i dati non salvati andranno PERSI definitivamente.\n\nVuoi annullare l'operazione?"
       );
-      if (shouldAbort) {
+      if (shouldCancel) {
         resetSession();
       }
   }, [resetSession]);
@@ -420,10 +420,33 @@ function App() {
             saveSuccess = true;
           } catch (e: any) {
             console.error("Dettaglio errore scrittura:", e);
-            if (e.message === "TIMEOUT_LOCKED") {
-              alert("⚠️ L'operazione di salvataggio sta impiegando troppo tempo.\n\nControlla che il documento '" + doc.name + "' non sia aperto in un programma esterno alla web app (come Adobe Reader).\n\nPER FAVORE: Chiudi il programma esterno e riprova a salvare.");
-            } else {
-              alert("⚠️ IMPOSSIBILE SALVARE IL FILE\n\nNon riesco a scrivere il documento '" + doc.name + "'.\n\nQuasi certamente il file è aperto in Adobe Acrobat o un altro programma.\n\nPER FAVORE:\n1. Chiudi il PDF nel lettore esterno (es. Adobe Acrobat).\n2. Riprova a premere il pulsante di salvataggio/finalizzazione.");
+            const wantSaveAs = window.confirm(
+              "Impossibile sovrascrivere il file. Potrebbe essere aperto in Adobe Reader o in un altro programma. Vuoi salvarne una nuova copia con Salva con nome?"
+            );
+            if (wantSaveAs) {
+              try {
+                const suggestedCopyName = doc.name.toLowerCase().endsWith('.pdf')
+                  ? doc.name.slice(0, -4) + '_copia.pdf'
+                  : doc.name + '_copia.pdf';
+
+                const newHandle = await (window as any).showSaveFilePicker({
+                  suggestedName: suggestedCopyName,
+                  types: [{
+                    description: 'PDF',
+                    accept: { 'application/pdf': ['.pdf'] }
+                  }],
+                });
+
+                if (newHandle) {
+                  await writeWithTimeout(newHandle, blob, 5000);
+                  saveSuccess = true;
+                }
+              } catch (saveAsErr: any) {
+                console.error("Errore durante Salva con nome:", saveAsErr);
+                if (saveAsErr.name !== 'AbortError') {
+                  alert("Impossibile salvare la copia: " + (saveAsErr.message || saveAsErr));
+                }
+              }
             }
           }
         }
