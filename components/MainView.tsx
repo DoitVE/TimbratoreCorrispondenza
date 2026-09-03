@@ -329,19 +329,25 @@ export const MainView: React.FC<MainViewProps> = ({
                     </div>
                  )}
 
-                 <textarea 
+                  <textarea 
                     id={`textarea-${stamp.id}`}
                     value={stamp.notes}
+                    ref={(el) => {
+                        if (el) {
+                            el.style.height = 'auto';
+                            el.style.height = `${Math.max(el.scrollHeight, 24)}px`;
+                        }
+                    }}
                     onFocus={() => setFocusedStampId(stamp.id)}
                     onBlur={() => setFocusedStampId(null)}
                     onChange={(e) => {
                         handleNotesChange(pageIndex, stamp, e.target.value);
                         e.target.style.height = 'auto';
-                        e.target.style.height = e.target.scrollHeight + 'px';
+                        e.target.style.height = `${Math.max(e.target.scrollHeight, 24)}px`;
                     }}
                     onMouseDown={(e) => e.stopPropagation()} 
                     onPointerDown={(e) => e.stopPropagation()} 
-                    className="resize-none outline-none text-black font-sans font-normal leading-tight text-center w-full block p-2 overflow-visible relative z-[110]"
+                    className="resize-none outline-none text-black font-sans font-normal leading-tight text-center w-full block p-2 overflow-hidden relative z-[110]"
                     placeholder={hideStructureOnly ? "" : "SCRIVI QUI..."}
                     style={{ 
                         fontSize: `7.5cqw`, 
@@ -617,15 +623,16 @@ export const MainView: React.FC<MainViewProps> = ({
                 </div>
             ))}
 
-            <div className={`notes-area p-0 relative overflow-visible z-[105] flex flex-col justify-start items-center`}
+            {/* Notes Area: Ancorata rigorosamente sotto l'ultima riga della tabella ed espandibile verso il basso */}
+            <div className="notes-area absolute left-0 right-0 z-[105] flex flex-col justify-start items-center overflow-visible"
                  style={{ 
+                     top: `${((1.25 + stamp.rows.length) / totalUnits) * 100}%`,
                      minHeight: `${((totalUnits - stamp.rows.length - 1.25) / totalUnits) * 100}%`,
-                     height: 'auto' 
+                     width: '100%'
                  }}>
                 {/* Placeholder "NOTE" Grigio Chiarissimo */}
                 {!stamp.notes && (
-                    <div className="absolute inset-0 bg-[#f9f9f9] flex items-center justify-center pointer-events-none z-[100] border-t-0"
-                         style={{ marginTop: '-1px' }}>
+                    <div className="absolute inset-0 bg-[#f9f9f9] flex items-center justify-center pointer-events-none z-[100]">
                         <span className="text-gray-300 italic font-medium select-none uppercase" style={{ fontSize: '4.5cqw', letterSpacing: '0.1em' }}>
                             Note
                         </span>
@@ -637,7 +644,7 @@ export const MainView: React.FC<MainViewProps> = ({
                     ref={(el) => {
                         if (el) {
                             el.style.height = 'auto';
-                            el.style.height = `${el.scrollHeight}px`;
+                            el.style.height = `${Math.max(el.scrollHeight, 24)}px`;
                         }
                     }}
                     onFocus={() => setFocusedStampId(stamp.id)}
@@ -645,20 +652,19 @@ export const MainView: React.FC<MainViewProps> = ({
                     onChange={(e) => {
                         handleNotesChange(pageIndex, stamp, e.target.value);
                         e.target.style.height = 'auto';
-                        e.target.style.height = `${e.target.scrollHeight}px`;
+                        e.target.style.height = `${Math.max(e.target.scrollHeight, 24)}px`;
                     }}
                     onPointerDown={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()} 
-                    className="w-full resize-none outline-none text-black font-sans font-normal leading-tight text-center relative z-[106] p-1 block overflow-visible"
+                    className="w-full resize-none outline-none text-black font-sans font-normal leading-tight text-center relative z-[106] px-1 py-0.5 block overflow-hidden"
                     style={{ 
                         fontSize: `7.5cqw`, 
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
-                        minHeight: '100%',
+                        minHeight: `${((totalUnits - stamp.rows.length - 1.25) / totalUnits) * 100}%`,
                         height: 'auto',
                         textShadow: EXTRA_THICK_HALO,
                         backgroundColor: stamp.notes ? 'white' : 'transparent',
-                        marginTop: '-1px', 
                         boxShadow: stamp.notes ? '0 1px 0 0 white' : 'none' 
                     }}
                 />
