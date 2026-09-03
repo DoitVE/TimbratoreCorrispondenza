@@ -12,21 +12,8 @@ const sanitizeText = (str: string): string => {
     .replace(/\u2013/g, "-") 
     .replace(/\u2014/g, "--") 
     .replace(/\u2026/g, "...") 
-    // Mappa i caratteri accentati e speciali a standard ASCII
-    .replace(/[àáâãäå]/g, "a")
-    .replace(/[èéêë]/g, "e")
-    .replace(/[ìíîï]/g, "i")
-    .replace(/[òóôõöø]/g, "o")
-    .replace(/[ùúûü]/g, "u")
-    .replace(/[ÀÁÂÃÄÅ]/g, "A")
-    .replace(/[ÈÉÊË]/g, "E")
-    .replace(/[ÌÍÎÏ]/g, "I")
-    .replace(/[ÒÓÔÕÖØ]/g, "O")
-    .replace(/[ÙÚÛÜ]/g, "U")
-    .replace(/[ç]/g, "c")
-    .replace(/[Ç]/g, "C")
-    .replace(/[€]/g, "EUR")
-    .replace(/[^\x20-\x7F\r\n]/g, ""); 
+    // Rimuove solo i caratteri di controllo non stampabili, preservando tutte le lettere accentate (à, è, é, ì, ò, ù, È, À...), simboli (€, °, ecc.) e punteggiatura
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ""); 
 };
 
 const safeNum = (n: any, fallback = 0): number => {
