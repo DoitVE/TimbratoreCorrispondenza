@@ -739,22 +739,24 @@ const drawStampOnPage = async (
           }
 
           if (stamp.overrideSignatureType && stamp.overrideSignatureType !== stamp.type) {
-              const bannerH = headerHeight * 0.22;
-              const bannerY = headerYBottom;
-              const bannerX = visualStampX + visualStampW - rightCellW;
-              const substText = "SOSTITUZIONE";
-              const substFontSize = Math.max(4, rightCellW * 0.042);
-              const substTextW = fontBold.widthOfTextAtSize(substText, substFontSize);
-              const substTextX = bannerX + (rightCellW - substTextW) / 2;
-              const substTextY = bannerY + (bannerH - substFontSize * 0.8) / 2;
-              const DARK_GRAY_COLOR = rgb(0.2, 0.2, 0.2);
-              page.drawText(substText, {
-                  x: substTextX,
-                  y: substTextY,
-                  size: substFontSize,
-                  font: fontBold,
-                  color: DARK_GRAY_COLOR,
-              });
+              try {
+                  const bannerH = headerHeight * 0.22;
+                  const bannerY = headerYBottom;
+                  const bannerX = visualStampX + visualStampW - rightCellW;
+                  const substText = "SOSTITUZIONE";
+                  const substFontSize = Math.max(4, visualStampW * 0.022);
+                  const substTextW = fontBold.widthOfTextAtSize(substText, substFontSize);
+                  const substTextX = bannerX + (rightCellW - substTextW) / 2;
+                  const substTextY = bannerY + (bannerH - substFontSize * 0.8) / 2;
+                  const DARK_GRAY_COLOR = rgb(0.25, 0.25, 0.25);
+                  dTextWithHalo(substText, substTextX, substTextY, {
+                      size: substFontSize,
+                      font: fontBold,
+                      color: DARK_GRAY_COLOR,
+                  }, 0.5, true);
+              } catch (e) {
+                  console.error("Error drawing substitution banner", e);
+              }
           }
       }
   }
