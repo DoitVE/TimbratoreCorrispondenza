@@ -212,7 +212,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isDragOverPdf, setIsDragOverPdf] = useState(false);
   const [isDragOverJson, setIsDragOverJson] = useState(false);
   const [isSubstitutionMode, setIsSubstitutionMode] = useState(false);
-  const [tempOverrides, setTempOverrides] = useState<Record<StampType, StampType | undefined>>({});
 
   const handleDragOver = (e: React.DragEvent, type: 'pdf' | 'json') => {
       e.preventDefault();
@@ -318,38 +317,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {mode === 'segreteria' && (
             <div className="p-4 flex-1 overflow-y-auto flex flex-col">
                 <div className="mb-4">
-                    {!isSubstitutionMode ? (
-                        <button 
-                            onClick={() => {
-                                setIsSubstitutionMode(true);
-                                setTempOverrides({ ...signatureOverrides });
-                            }}
-                            className="w-full bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold py-2.5 px-3 rounded-lg transition-colors uppercase shadow-sm flex items-center justify-center gap-2"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                            </svg>
-                            Sostituzione Dirigente
-                        </button>
-                    ) : (
-                        <div className="space-y-2">
-                            <button 
-                                disabled
-                                className="w-full bg-slate-200 text-slate-700 text-xs font-bold py-2 px-3 rounded-lg uppercase cursor-not-allowed text-center"
-                            >
-                                Seleziona timbro
-                            </button>
-                            <button 
-                                onClick={() => {
-                                    onUpdateSignatureOverrides?.(tempOverrides);
-                                    setIsSubstitutionMode(false);
-                                }}
-                                className="w-full bg-[#c60c30] hover:bg-[#a10a26] text-white text-xs font-bold py-2 px-3 rounded-lg transition-colors uppercase shadow-sm text-center"
-                            >
-                                Conferma
-                            </button>
-                        </div>
-                    )}
+                    <button 
+                        onClick={() => setIsSubstitutionMode(prev => !prev)}
+                        className={`w-full text-xs font-bold py-2.5 px-3 rounded-lg transition-colors uppercase shadow-sm flex items-center justify-center gap-2 ${isSubstitutionMode ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-slate-800 hover:bg-slate-900 text-white'}`}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                        </svg>
+                        {isSubstitutionMode ? 'Configurazione Sostituzione Attiva' : 'Sostituzione Dirigente'}
+                    </button>
                 </div>
 
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Seleziona Timbro</h3>
@@ -359,15 +335,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             key={type} 
                             type={type} 
                             onClick={() => {
-                                if (!isSubstitutionMode) {
-                                    onAddStamp(type);
-                                }
+                                onAddStamp(type);
                             }}
                             doitSignatureUrl={doitSignatureUrl}
                             isSubstitutionMode={isSubstitutionMode}
-                            currentSigType={tempOverrides[type] !== undefined ? tempOverrides[type] : (signatureOverrides?.[type] || type)}
+                            currentSigType={signatureOverrides?.[type] || type}
                             onSelectSubstitution={(st, newSig) => {
-                                setTempOverrides(prev => ({ ...prev, [st]: newSig === st ? undefined : newSig }));
+                                const updated = {
+                                    ...signatureOverrides,
+                                    [st]: newSig === st ? undefined : newSig
+                                };
+                                onUpdateSignatureOverrides?.(updated);
                             }}
                         />
                     ))}
