@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { PageData, AppMode, WorkMode } from '../types';
-import { StampType, STAMP_DEFINITIONS, createStamp, getUniformLabelFontSizeCqw } from '../services/stampUtils';
+import { StampType, STAMP_DEFINITIONS, createStamp, getUniformLabelFontSizeCqw, getSignatureUrlForType } from '../services/stampUtils';
 
 const THICK_WHITE_HALO = '0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff';
 const EXTRA_THICK_HALO = '0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff, 0 0 4px #fff, 0 0 4px #fff';
@@ -25,25 +25,32 @@ interface SidebarProps {
   doitSignatureUrl?: string;
   workMode?: WorkMode;
   onExportArchive?: () => void;
+  signatureOverrides?: Record<StampType, StampType | undefined>;
+  onUpdateSignatureOverrides?: (overrides: Record<StampType, StampType | undefined>) => void;
 }
 
 interface StampPreviewButtonProps {
   type: StampType;
   onClick: () => void;
   doitSignatureUrl?: string;
+  isSubstitutionMode?: boolean;
+  currentSigType?: StampType;
+  onSelectSubstitution?: (type: StampType, newSig: StampType) => void;
 }
 
-const StampPreviewButton: React.FC<StampPreviewButtonProps> = ({ type, onClick, doitSignatureUrl }) => {
+const StampPreviewButton: React.FC<StampPreviewButtonProps> = ({ 
+    type, 
+    onClick, 
+    doitSignatureUrl, 
+    isSubstitutionMode, 
+    currentSigType, 
+    onSelectSubstitution 
+}) => {
     const def = STAMP_DEFINITIONS[type];
     const dummyStamp = createStamp(type);
     const uniformFontSizeCqw = getUniformLabelFontSizeCqw(dummyStamp.rows);
-    
-    // Halo più simile alla MainView ma scalato per la sidebar
-    const THICK_HALO_SMALL = `
-        -0.4px -0.4px 0 #fff, 0.4px -0.4px 0 #fff, -0.4px 0.4px 0 #fff, 0.4px 0.4px 0 #fff,
-        -0.8px -0.8px 0 #fff, 0.8px -0.8px 0 #fff, -0.8px 0.8px 0 #fff, 0.8px 0.8px 0 #fff,
-        0 0 2px #fff
-    `;
+    const effectiveSigType = currentSigType || type;
+    const sigUrl = getSignatureUrlForType(effectiveSigType, doitSignatureUrl);
 
     const FIXED_HEADER_HEIGHT = 42;
     const FIXED_ROW_HEIGHT = 26;
@@ -52,8 +59,8 @@ const StampPreviewButton: React.FC<StampPreviewButtonProps> = ({ type, onClick, 
     return (
         <button 
             onClick={onClick}
-            className="w-full group hover:scale-[1.01] transition-transform duration-200 outline-none focus:ring-2 focus:ring-[#c60c30] focus:ring-offset-1 rounded"
-            title={`Inserisci timbro ${def.title}`}
+            className={`w-full group transition-transform duration-200 outline-none rounded relative ${isSubstitutionMode ? 'cursor-pointer hover:scale-[1.01] ring-2 ring-amber-400' : 'hover:scale-[1.01] focus:ring-2 focus:ring-[#c60c30] focus:ring-offset-1'}`}
+            title={isSubstitutionMode ? `Clicca per configurare la firma per ${def.title}` : `Inserisci timbro ${def.title}`}
         >
             <div className="stamp-preview-container bg-white text-[#c60c30] shadow-sm group-hover:shadow-md transition-shadow overflow-hidden flex flex-col relative"
                  style={{ height: 'auto', border: 'none' }}>
@@ -61,7 +68,6 @@ const StampPreviewButton: React.FC<StampPreviewButtonProps> = ({ type, onClick, 
                 
                 {/* Overlay Struttura Rossa (Sempre sopra) */}
                 <div className="absolute inset-0 pointer-events-none z-[120]">
-                    {/* Bordo Esterno (Solo per Header + Righe, esclude area Note) */}
                     <div className="absolute top-0 left-0 right-0" 
                          style={{ 
                             height: `${FIXED_HEADER_HEIGHT + (def.rows.length * FIXED_ROW_HEIGHT)}px`,
@@ -75,34 +81,46 @@ const StampPreviewButton: React.FC<StampPreviewButtonProps> = ({ type, onClick, 
                     className="bg-[#c60c30] text-white font-extrabold uppercase tracking-tight leading-none relative overflow-hidden flex items-stretch shrink-0 px-2 py-1 z-20"
                     style={{ height: `${FIXED_HEADER_HEIGHT}px`, borderBottom: 'none' }}
                 >
-                    {/* Left Cell - 25% width - VUOTA */}
                     <div className="w-[25%] bg-transparent h-full"></div>
-
-                    {/* Center Cell - 50% width - TESTO CENTRATO */}
                     <div className="w-[50%] h-full flex items-center justify-center relative bg-transparent">
                         <span className="relative z-10 text-center w-full px-2" style={{ fontSize: '7.8cqw', lineHeight: 1, whiteSpace: 'nowrap' }}>{def.title}</span>
                     </div>
 
-                    {/* Right Cell (FIRMA) - 25% width - DESTRA */}
                     <div className="w-[25%] h-full bg-transparent flex items-center justify-end relative overflow-hidden">
-                        {type === 'DOIT_VE' && doitSignatureUrl && (
+                        {sigUrl && (
                             <img 
-                                src={doitSignatureUrl} 
-                                alt="Firma" 
-                                crossOrigin="anonymous" 
-                                className="absolute right-0 top-0 h-full w-full object-fill pointer-events-none select-none" 
-                            />
-                        )}
-                        {['INGEGNERIA_VE', 'UT_NORD', 'UT_SUD_VE'].includes(type) && (
-                            <img 
-                                src={type === 'INGEGNERIA_VE' ? '/timbri/ING_VE.png' : type === 'UT_NORD' ? '/timbri/UT_NORD_VE.png' : '/timbri/UT_SUD_VE.png'}
+                                src={sigUrl} 
                                 alt="Firma" 
                                 crossOrigin="anonymous" 
                                 className="absolute right-0 top-0 h-full w-full object-fill pointer-events-none select-none z-30" 
                             />
                         )}
+                                {effectiveSigType !== type && (
+                            <div className="absolute bottom-0 left-0 right-0 h-[22%] flex items-center justify-center z-40 pointer-events-none px-0.5">
+                                <span className="text-[2.2cqw] font-bold text-gray-700 uppercase tracking-tight leading-none whitespace-nowrap w-full text-center">
+                                    SOSTITUZIONE
+                                </span>
+                            </div>
+                        )}
                     </div>
                 </div>
+
+                {isSubstitutionMode && (
+                    <div className="absolute inset-0 bg-black/50 z-[140] flex flex-col items-center justify-center p-2 rounded" onClick={(e) => e.stopPropagation()}>
+                        <span className="text-[10px] font-bold text-white mb-1 shadow-sm">Seleziona Firma:</span>
+                        <select 
+                            value={effectiveSigType} 
+                            onChange={(e) => onSelectSubstitution?.(type, e.target.value as StampType)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs font-bold text-black border border-gray-300 rounded p-1 bg-white shadow-md outline-none cursor-pointer"
+                        >
+                            <option value="DOIT_VE">DOIT VE</option>
+                            <option value="INGEGNERIA_VE">ING VE</option>
+                            <option value="UT_NORD">UT NORD VE</option>
+                            <option value="UT_SUD_VE">UT SUD VE</option>
+                        </select>
+                    </div>
+                )}
 
                 <div className="flex flex-col text-[10px] font-bold leading-none bg-transparent flex-1 z-10">
                     {def.rows.map((row, idx) => (
@@ -111,21 +129,15 @@ const StampPreviewButton: React.FC<StampPreviewButtonProps> = ({ type, onClick, 
                             className="flex relative"
                             style={{ height: `${FIXED_ROW_HEIGHT}px` }}
                         >
-                            {/* Linea Orizzontale Rossa Sotto la Riga */}
                             <div className="absolute bottom-0 left-0 right-0 h-0 border-t-[1.5px] border-[#c60c30] z-[130]" />
-
                             {row.fullWidth ? (
                                 <div className="flex w-full h-full">
-                                    <div className="w-1/2 bg-transparent relative">
-                                        {/* Linea Verticale Centrale RIMOSSA per fullWidth */}
-                                    </div>
+                                    <div className="w-1/2 bg-transparent relative"></div>
                                     <div className="w-1/2 flex items-stretch h-full overflow-hidden bg-transparent">
-                                        {/* Label Cell (75% CENTERED) */}
                                         <div className="w-[75%] flex items-center justify-center bg-transparent px-1">
                                              <span className="uppercase font-bold text-center leading-none shrink select-none whitespace-normal text-[#c60c30]" 
                                                    style={{ fontSize: `${uniformFontSizeCqw}cqw`, textShadow: THICK_WHITE_HALO }}>{row.left}</span>
                                          </div>
-                                        {/* Checkbox Cell (25% RIGHT) */}
                                         <div className="w-[25%] flex items-center justify-end pr-[4%] bg-transparent">
                                             <div className="aspect-square h-[84%] border-[1.5px] border-[#c60c30] shrink-0 bg-white/10 shadow-[0_0_3px_white]"></div>
                                         </div>
@@ -133,30 +145,23 @@ const StampPreviewButton: React.FC<StampPreviewButtonProps> = ({ type, onClick, 
                                 </div>
                             ) : (
                                 <div className="flex w-full h-full">
-                                    {/* Left Cell (75/25) */}
                                     <div className="w-1/2 flex items-stretch h-full overflow-hidden bg-transparent relative">
-                                        {/* Linea Verticale Centrale */}
                                         <div className="absolute top-0 right-0 bottom-0 w-0 border-r-[1.5px] border-[#c60c30] z-[130]" />
-                                        {/* Label Cell (75% CENTERED) */}
                                         <div className="w-[75%] flex items-center justify-center bg-transparent px-1">
                                              <span className="uppercase font-bold text-center leading-none shrink select-none whitespace-normal text-[#c60c30]" 
                                                    style={{ fontSize: `${uniformFontSizeCqw}cqw`, textShadow: THICK_WHITE_HALO }}>{row.left}</span>
                                          </div>
-                                        {/* Checkbox Cell (25% RIGHT) */}
                                         <div className="w-[25%] flex items-center justify-end pr-[4%] bg-transparent">
                                             <div className="aspect-square h-[84%] border-[1.5px] border-[#c60c30] shrink-0 bg-white/10 shadow-[0_0_3px_white]"></div>
                                         </div>
                                     </div>
-                                    {/* Right Cell (75/25) */}
                                     <div className="w-1/2 flex items-stretch h-full overflow-hidden bg-transparent">
                                         {row.right && (
                                             <>
-                                                {/* Label Cell (75% CENTERED) */}
                                                 <div className="w-[75%] flex items-center justify-center bg-transparent px-1">
                                                      <span className="uppercase font-bold text-center leading-none shrink select-none whitespace-normal text-[#c60c30]" 
                                                            style={{ fontSize: `${uniformFontSizeCqw}cqw`, textShadow: THICK_WHITE_HALO }}>{row.right}</span>
                                                  </div>
-                                                {/* Checkbox Cell (25% RIGHT) */}
                                                 <div className="w-[25%] flex items-center justify-end pr-[4%] bg-transparent">
                                                     <div className="aspect-square h-[84%] border-[1.5px] border-[#c60c30] shrink-0 bg-white/10 shadow-[0_0_3px_white]"></div>
                                                 </div>
@@ -199,11 +204,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSetActiveTool,
   doitSignatureUrl,
   workMode,
-  onExportArchive
+  onExportArchive,
+  signatureOverrides = {} as any,
+  onUpdateSignatureOverrides
 }) => {
   const stampTypes = Object.keys(STAMP_DEFINITIONS) as StampType[];
   const [isDragOverPdf, setIsDragOverPdf] = useState(false);
   const [isDragOverJson, setIsDragOverJson] = useState(false);
+  const [isSubstitutionMode, setIsSubstitutionMode] = useState(false);
+  const [tempOverrides, setTempOverrides] = useState<Record<StampType, StampType | undefined>>({});
 
   const handleDragOver = (e: React.DragEvent, type: 'pdf' | 'json') => {
       e.preventDefault();
@@ -307,15 +316,59 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* MODE: SEGRETERIA (Stamps) */}
         {mode === 'segreteria' && (
-            <div className="p-4 flex-1 overflow-y-auto">
+            <div className="p-4 flex-1 overflow-y-auto flex flex-col">
+                <div className="mb-4">
+                    {!isSubstitutionMode ? (
+                        <button 
+                            onClick={() => {
+                                setIsSubstitutionMode(true);
+                                setTempOverrides({ ...signatureOverrides });
+                            }}
+                            className="w-full bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold py-2.5 px-3 rounded-lg transition-colors uppercase shadow-sm flex items-center justify-center gap-2"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                            Sostituzione Dirigente
+                        </button>
+                    ) : (
+                        <div className="space-y-2">
+                            <button 
+                                disabled
+                                className="w-full bg-slate-200 text-slate-700 text-xs font-bold py-2 px-3 rounded-lg uppercase cursor-not-allowed text-center"
+                            >
+                                Seleziona timbro
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    onUpdateSignatureOverrides?.(tempOverrides);
+                                    setIsSubstitutionMode(false);
+                                }}
+                                className="w-full bg-[#c60c30] hover:bg-[#a10a26] text-white text-xs font-bold py-2 px-3 rounded-lg transition-colors uppercase shadow-sm text-center"
+                            >
+                                Conferma
+                            </button>
+                        </div>
+                    )}
+                </div>
+
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Seleziona Timbro</h3>
                 <div className="space-y-4">
                     {stampTypes.map(type => (
                         <StampPreviewButton 
                             key={type} 
                             type={type} 
-                            onClick={() => onAddStamp(type)}
+                            onClick={() => {
+                                if (!isSubstitutionMode) {
+                                    onAddStamp(type);
+                                }
+                            }}
                             doitSignatureUrl={doitSignatureUrl}
+                            isSubstitutionMode={isSubstitutionMode}
+                            currentSigType={tempOverrides[type] !== undefined ? tempOverrides[type] : (signatureOverrides?.[type] || type)}
+                            onSelectSubstitution={(st, newSig) => {
+                                setTempOverrides(prev => ({ ...prev, [st]: newSig === st ? undefined : newSig }));
+                            }}
                         />
                     ))}
                 </div>

@@ -714,12 +714,13 @@ const drawStampOnPage = async (
       }
  
       if (isFixedStamp) { // ABILITATO ANCHE PER DIRIGENTE
+          const effectiveSigType = stamp.overrideSignatureType || stamp.type;
           let urlToUse: string | undefined;
-          if (stamp.type === 'DOIT_VE') {
+          if (effectiveSigType === 'DOIT_VE') {
               urlToUse = doitSignatureUrl;
-          } else if (stamp.type === 'INGEGNERIA_VE') {
+          } else if (effectiveSigType === 'INGEGNERIA_VE') {
               urlToUse = '/timbri/ING_VE.png';
-          } else if (stamp.type === 'UT_NORD') {
+          } else if (effectiveSigType === 'UT_NORD') {
               urlToUse = '/timbri/UT_NORD_VE.png';
           } else {
               urlToUse = '/timbri/UT_SUD_VE.png';
@@ -735,6 +736,25 @@ const drawStampOnPage = async (
                   const sigY = headerYBottom; 
                   await dImage(sigBytes, sigX, sigY, sigW, sigH);
               } catch (e) {}
+          }
+
+          if (stamp.overrideSignatureType && stamp.overrideSignatureType !== stamp.type) {
+              const bannerH = headerHeight * 0.22;
+              const bannerY = headerYBottom;
+              const bannerX = visualStampX + visualStampW - rightCellW;
+              const substText = "SOSTITUZIONE";
+              const substFontSize = Math.max(4, rightCellW * 0.042);
+              const substTextW = fontBold.widthOfTextAtSize(substText, substFontSize);
+              const substTextX = bannerX + (rightCellW - substTextW) / 2;
+              const substTextY = bannerY + (bannerH - substFontSize * 0.8) / 2;
+              const DARK_GRAY_COLOR = rgb(0.2, 0.2, 0.2);
+              page.drawText(substText, {
+                  x: substTextX,
+                  y: substTextY,
+                  size: substFontSize,
+                  font: fontBold,
+                  color: DARK_GRAY_COLOR,
+              });
           }
       }
   }

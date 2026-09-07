@@ -51,7 +51,15 @@ export const STAMP_DEFINITIONS: Record<StampType, { title: string, rows: RowDef[
   }
 };
 
-export const createStamp = (type: StampType, referenceFontSize: number = 14): StampData => {
+export const getSignatureUrlForType = (type: StampType, doitSignatureUrl?: string | null): string => {
+    if (type === 'DOIT_VE') return doitSignatureUrl || '/timbri/DOIT_VE.png';
+    if (type === 'INGEGNERIA_VE') return '/timbri/ING_VE.png';
+    if (type === 'UT_NORD') return '/timbri/UT_NORD_VE.png';
+    if (type === 'UT_SUD_VE') return '/timbri/UT_SUD_VE.png';
+    return '/timbri/DOIT_VE.png';
+};
+
+export const createStamp = (type: StampType, referenceFontSize: number = 14, overrideSignatureType?: StampType): StampData => {
   if (type === 'FREE_TEXT' as any) {
       return {
           id: `text-${Date.now()}`,
@@ -105,7 +113,8 @@ export const createStamp = (type: StampType, referenceFontSize: number = 14): St
     width, 
     height: totalHeight,
     scale: 1,
-    isTransparent: false
+    isTransparent: false,
+    overrideSignatureType
   };
 };
 

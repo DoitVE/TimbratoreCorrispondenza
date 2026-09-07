@@ -1,7 +1,7 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { PageData, StampData } from '../types';
-import { getUniformLabelFontSizeCqw } from '../services/stampUtils';
+import { getUniformLabelFontSizeCqw, getSignatureUrlForType } from '../services/stampUtils';
 
 const THICK_WHITE_HALO = '0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff';
 const EXTRA_THICK_HALO = '0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff, 0 0 4px #fff, 0 0 4px #fff';
@@ -472,32 +472,32 @@ export const MainView: React.FC<MainViewProps> = ({
 
                 {/* Right Cell (FIRMA) - 25% width - DESTRA (Cella Trasparente) */}
                 <div className="w-[25%] flex items-center justify-end h-full relative overflow-hidden bg-transparent">
-                    {!hideStructureOnly && (
-                        <>
-                            {(stamp.type === 'DOIT_VE' && doitSignatureUrl) && (
-                                <img 
-                                    src={doitSignatureUrl} 
-                                    alt="Firma" 
-                                    className="absolute right-0 top-0 h-full w-full object-fill pointer-events-none"
-                                    style={{ 
-                                        maxWidth: 'none',
-                                        display: 'block'
-                                    }}
-                                />
-                            )}
-                            {(isStandardStamp(stamp.type) && stamp.type !== 'DOIT_VE') && (
-                                <img 
-                                    src={stamp.type === 'INGEGNERIA_VE' ? '/timbri/ING_VE.png' : stamp.type === 'UT_NORD' ? '/timbri/UT_NORD_VE.png' : '/timbri/UT_SUD_VE.png'}
-                                    alt="Firma" 
-                                    className="absolute right-0 top-0 h-full w-full object-fill pointer-events-none z-30"
-                                    style={{ 
-                                        maxWidth: 'none',
-                                        display: 'block'
-                                    }}
-                                />
-                            )}
-                        </>
-                    )}
+                    {!hideStructureOnly && (() => {
+                        const effectiveSigType = stamp.overrideSignatureType || stamp.type;
+                        const sigUrl = getSignatureUrlForType(effectiveSigType, doitSignatureUrl);
+                        return (
+                            <>
+                                {sigUrl && (
+                                    <img 
+                                        src={sigUrl} 
+                                        alt="Firma" 
+                                        className="absolute right-0 top-0 h-full w-full object-fill pointer-events-none z-30"
+                                        style={{ 
+                                            maxWidth: 'none',
+                                            display: 'block'
+                                        }}
+                                    />
+                                )}
+                                {stamp.overrideSignatureType && stamp.overrideSignatureType !== stamp.type && (
+                                    <div className="absolute bottom-0 left-0 right-0 h-[22%] flex items-center justify-center z-40 pointer-events-none px-0.5">
+                                        <span className="text-[2.2cqw] font-bold text-gray-700 uppercase tracking-tight leading-none whitespace-nowrap w-full text-center">
+                                            SOSTITUZIONE
+                                        </span>
+                                    </div>
+                                )}
+                            </>
+                        );
+                    })()}
                 </div>
             </div>
 

@@ -24,6 +24,7 @@ function App() {
   const [pendingSignatureUrl, setPendingSignatureUrl] = useState<string | null>(null);
   const [showMailModal, setShowMailModal] = useState<boolean>(false);
   const [lastArchiveJson, setLastArchiveJson] = useState<string | undefined>(undefined);
+  const [signatureOverrides, setSignatureOverrides] = useState<Record<StampType, StampType | undefined>>({} as any);
 
   const resetSession = useCallback(() => {
       setAppMode('selection');
@@ -35,6 +36,7 @@ function App() {
       setPendingSignatureUrl(null);
       setShowMailModal(false);
       setLastArchiveJson(undefined);
+      setSignatureOverrides({} as any);
   }, []);
 
   const handleGoHome = useCallback(() => {
@@ -81,6 +83,9 @@ function App() {
 
   const handleFiles = async (fileList: File[]) => {
       if (fileList.length === 0) return;
+
+      // Ad ogni nuova elaborazione / caricamento, reset delle firme a default
+      setSignatureOverrides({} as any);
 
       const jsonFile = fileList.find(f => f.name.endsWith('.json'));
       
@@ -234,7 +239,8 @@ function App() {
     if (currentDocIndex === -1) return;
     const currentPage = documents[currentDocIndex].pages[visiblePageIndex];
     const baseFontSize = currentPage?.baseFontSize;
-    const newStamp = createStamp(type, baseFontSize);
+    const overrideSig = signatureOverrides[type];
+    const newStamp = createStamp(type, baseFontSize, overrideSig);
     updateCurrentDocumentPage(visiblePageIndex, { stamps: [...(currentPage.stamps || []), newStamp] });
   };
 
@@ -580,6 +586,8 @@ function App() {
           doitSignatureUrl={doitSignaturePath}
           workMode={workMode}
           onExportArchive={handleExportArchive}
+          signatureOverrides={signatureOverrides}
+          onUpdateSignatureOverrides={setSignatureOverrides}
         />
         <MainView 
           pages={currentDoc?.pages || []} 

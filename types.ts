@@ -35,6 +35,7 @@ export interface StampData {
   scale: number;
   imageUrl?: string; // For Signatures
   isTransparent?: boolean; // New: toggle background transparency
+  overrideSignatureType?: 'DOIT_VE' | 'INGEGNERIA_VE' | 'UT_NORD' | 'UT_SUD_VE';
 }
 
 export interface PageData {
