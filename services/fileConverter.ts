@@ -467,7 +467,10 @@ async function extractDocxMediaMap(arrayBuffer: ArrayBuffer): Promise<{
       else if (lower.endsWith('.svg')) mime = 'image/svg+xml';
       else if (lower.endsWith('.webp')) mime = 'image/webp';
       else if (lower.endsWith('.bmp')) mime = 'image/bmp';
-      else if (lower.endsWith('.emf') || lower.endsWith('.wmf')) mime = 'image/png';
+      else if (lower.endsWith('.emf') || lower.endsWith('.wmf')) {
+        // I file .emf/.wmf sono vettoriali Windows: verifichiamo se esiste una versione png associata
+        mime = 'image/png';
+      }
 
       const base64 = await zip.file(path)?.async('base64');
       if (base64) {
@@ -481,6 +484,9 @@ async function extractDocxMediaMap(arrayBuffer: ArrayBuffer): Promise<{
         mediaMap.set(`media/${fileName}`.toLowerCase(), dataUri);
         mediaMap.set(fileName, dataUri);
         mediaMap.set(fileName.toLowerCase(), dataUri);
+        // Registra anche la versione senza estensione per matching flessibile
+        const baseNameWithoutExt = fileName.replace(/\.[^/.]+$/, '').toLowerCase();
+        mediaMap.set(baseNameWithoutExt, dataUri);
       }
     }
 
@@ -555,8 +561,10 @@ async function ensureAllImagesLoaded(
     } else if (currentSrc.startsWith('blob:') && i < orderedImages.length) {
       // Se è un Blob URL, sostituisci con il Data URL Base64 corrispondente per evitare blocchi CORS/Canvas-taint
       bestDataUri = orderedImages[i];
-    } else if (!currentSrc || currentSrc === 'about:blank' || currentSrc.startsWith('rId')) {
-      if (fallbackIndex < orderedImages.length) {
+    } else if (!currentSrc || currentSrc === 'about:blank' || currentSrc.startsWith('rId') || img.naturalWidth === 0) {
+      if (i < orderedImages.length) {
+        bestDataUri = orderedImages[i];
+      } else if (fallbackIndex < orderedImages.length) {
         bestDataUri = orderedImages[fallbackIndex++];
       }
     }
@@ -640,18 +648,19 @@ async function renderDocxWithHighFidelity(arrayBuffer: ArrayBuffer): Promise<Arr
   // 2. Estrai preventivamente la mappa di tutte le immagini e loghi presenti nel pacchetto Word
   const { mediaMap, orderedImages } = await extractDocxMediaMap(arrayBuffer);
 
-  // 3. Crea un contenitore montato a livello background con larghezza A4 esatta (210mm)
+  // 3. Crea un contenitore montato ma isolato con larghezza A4 esatta (210mm)
+  // Usiamo left: -9999px con visibilità 1 e opacità 1 per evitare che il browser applichi 'GPU rasterization skip' sulle immagini
   const container = document.createElement('div');
   container.setAttribute('data-docx-render-stage', 'true');
   container.style.position = 'fixed';
-  container.style.left = '0';
+  container.style.left = '-9999px';
   container.style.top = '0';
   container.style.width = '210mm'; // Standard ISO A4 esatto (793.7px @ 96 DPI)
   container.style.minWidth = '210mm';
   container.style.background = '#ffffff';
   container.style.color = '#000000';
-  container.style.zIndex = '-99999';
   container.style.opacity = '1'; // CRITICO: 1 per permettere a html2canvas di fotografare i pixel a piena saturazione
+  container.style.visibility = 'visible';
   container.style.pointerEvents = 'none';
   container.style.overflow = 'visible';
   container.style.boxSizing = 'border-box';
@@ -686,7 +695,7 @@ async function renderDocxWithHighFidelity(arrayBuffer: ArrayBuffer): Promise<Arr
     await ensureAllImagesLoaded(container, mediaMap, orderedImages);
 
     // Breve stabilizzazione per il completamento del reflow del DOM
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
     let sections = Array.from(container.querySelectorAll<HTMLElement>('section.docx'));
     if (sections.length === 0) {
@@ -716,6 +725,8 @@ async function renderDocxWithHighFidelity(arrayBuffer: ArrayBuffer): Promise<Arr
           if (clonedContainer) {
             clonedContainer.style.opacity = '1';
             clonedContainer.style.visibility = 'visible';
+            clonedContainer.style.left = '0';
+            clonedContainer.style.top = '0';
           }
           // Copia i Data URL verificati su tutte le immagini clonate
           const clonedImgs = clonedDoc.querySelectorAll<HTMLImageElement>('img');
