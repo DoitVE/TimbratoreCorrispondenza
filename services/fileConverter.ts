@@ -432,6 +432,123 @@ async function ensureMetricCompatibleFontsLoaded(): Promise<void> {
 }
 
 /**
+ * Decodifica o estrae bitmap/png da un buffer EMF (Enhanced Metafile) o WMF (Windows Metafile).
+ * I file EMF di Word memorizzano spesso al loro interno record EMR_STRETCHDIBITS, EMR_BITBLT
+ * o immagini PNG/JPEG incorporate. Se contiene una DIB o bitmap, viene convertita direttamente in PNG Data URL.
+ */
+function decodeEmfWmfToDataUri(buffer: Uint8Array): string | null {
+  try {
+    // 1. Cerca firme PNG o JPEG incorporate direttamente nel flusso di byte EMF/WMF
+    for (let i = 0; i < buffer.length - 8; i++) {
+      // Firma PNG: 0x89 0x50 0x4E 0x47 0x0D 0x0A 0x1A 0x0A
+      if (
+        buffer[i] === 0x89 &&
+        buffer[i + 1] === 0x50 &&
+        buffer[i + 2] === 0x4e &&
+        buffer[i + 3] === 0x47 &&
+        buffer[i + 4] === 0x0d &&
+        buffer[i + 5] === 0x0a &&
+        buffer[i + 6] === 0x1a &&
+        buffer[i + 7] === 0x0a
+      ) {
+        const pngBytes = buffer.slice(i);
+        let binary = '';
+        for (let b = 0; b < pngBytes.length; b++) {
+          binary += String.fromCharCode(pngBytes[b]);
+        }
+        return `data:image/png;base64,${btoa(binary)}`;
+      }
+      // Firma JPEG: 0xFF 0xD8 0xFF
+      if (buffer[i] === 0xff && buffer[i + 1] === 0xd8 && buffer[i + 2] === 0xff) {
+        const jpgBytes = buffer.slice(i);
+        let binary = '';
+        for (let b = 0; b < jpgBytes.length; b++) {
+          binary += String.fromCharCode(jpgBytes[b]);
+        }
+        return `data:image/jpeg;base64,${btoa(binary)}`;
+      }
+    }
+
+    // 2. Parser per DIB (Device Independent Bitmap) contenuta nei record EMF (EMR_STRETCHDIBITS)
+    const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+    let offset = 0;
+    while (offset + 8 <= buffer.length) {
+      const type = view.getUint32(offset, true);
+      const size = view.getUint32(offset + 4, true);
+      if (size < 8 || offset + size > buffer.length) break;
+
+      // EMR_STRETCHDIBITS = 81 (0x51), EMR_BITBLT = 76 (0x4C)
+      if (type === 81 && offset + 80 <= buffer.length) {
+        const offBmiSrc = view.getUint32(offset + 64, true);
+        const cbBmiSrc = view.getUint32(offset + 68, true);
+        const offBitsSrc = view.getUint32(offset + 72, true);
+        const cbBitsSrc = view.getUint32(offset + 76, true);
+
+        if (offBmiSrc > 0 && offBitsSrc > 0 && cbBmiSrc > 0 && cbBitsSrc > 0) {
+          const bmiPos = offset + offBmiSrc;
+          const bitsPos = offset + offBitsSrc;
+          if (bmiPos + cbBmiSrc <= buffer.length && bitsPos + cbBitsSrc <= buffer.length) {
+            // Estrai header bitmap (BITMAPINFOHEADER 40 byte)
+            const biWidth = view.getInt32(bmiPos + 4, true);
+            const biHeight = Math.abs(view.getInt32(bmiPos + 8, true));
+            const biBitCount = view.getUint16(bmiPos + 14, true);
+            const biCompression = view.getUint32(bmiPos + 16, true);
+
+            if (biWidth > 0 && biHeight > 0 && (biCompression === 0 || biCompression === 3)) {
+              const canvas = document.createElement('canvas');
+              canvas.width = biWidth;
+              canvas.height = biHeight;
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                const imgData = ctx.createImageData(biWidth, biHeight);
+                const rawBits = buffer.slice(bitsPos, bitsPos + cbBitsSrc);
+                const isBottomUp = view.getInt32(bmiPos + 8, true) > 0;
+
+                if (biBitCount === 32) {
+                  for (let y = 0; y < biHeight; y++) {
+                    const srcY = isBottomUp ? biHeight - 1 - y : y;
+                    for (let x = 0; x < biWidth; x++) {
+                      const srcIdx = (srcY * biWidth + x) * 4;
+                      const dstIdx = (y * biWidth + x) * 4;
+                      imgData.data[dstIdx] = rawBits[srcIdx + 2];     // R
+                      imgData.data[dstIdx + 1] = rawBits[srcIdx + 1]; // G
+                      imgData.data[dstIdx + 2] = rawBits[srcIdx];     // B
+                      imgData.data[dstIdx + 3] = rawBits[srcIdx + 3] || 255; // A
+                    }
+                  }
+                  ctx.putImageData(imgData, 0, 0);
+                  return canvas.toDataURL('image/png');
+                } else if (biBitCount === 24) {
+                  const rowStride = Math.floor((biWidth * 3 + 3) / 4) * 4;
+                  for (let y = 0; y < biHeight; y++) {
+                    const srcY = isBottomUp ? biHeight - 1 - y : y;
+                    for (let x = 0; x < biWidth; x++) {
+                      const srcIdx = srcY * rowStride + x * 3;
+                      const dstIdx = (y * biWidth + x) * 4;
+                      imgData.data[dstIdx] = rawBits[srcIdx + 2];     // R
+                      imgData.data[dstIdx + 1] = rawBits[srcIdx + 1]; // G
+                      imgData.data[dstIdx + 2] = rawBits[srcIdx];     // B
+                      imgData.data[dstIdx + 3] = 255;                 // A
+                    }
+                  }
+                  ctx.putImageData(imgData, 0, 0);
+                  return canvas.toDataURL('image/png');
+                }
+              }
+            }
+          }
+        }
+      }
+
+      offset += size;
+    }
+  } catch (err) {
+    console.warn('Decodifica EMF/WMF non riuscita:', err);
+  }
+  return null;
+}
+
+/**
  * Estrae una mappa completa di immagini/loghi (Base64 data URI) direttamente dai media e dalle relazioni dell'archivio DOCX.
  * Mappa:
  * 1. Percorsi file: 'word/media/image1.png', 'media/image1.png', 'image1.png'
@@ -467,14 +584,25 @@ async function extractDocxMediaMap(arrayBuffer: ArrayBuffer): Promise<{
       else if (lower.endsWith('.svg')) mime = 'image/svg+xml';
       else if (lower.endsWith('.webp')) mime = 'image/webp';
       else if (lower.endsWith('.bmp')) mime = 'image/bmp';
-      else if (lower.endsWith('.emf') || lower.endsWith('.wmf')) {
-        // I file .emf/.wmf sono vettoriali Windows: verifichiamo se esiste una versione png associata
-        mime = 'image/png';
+
+      let dataUri: string | null = null;
+
+      // Gestione specifica file metafile Windows .emf e .wmf
+      if (lower.endsWith('.emf') || lower.endsWith('.wmf')) {
+        const rawBytes = await zip.file(path)?.async('uint8array');
+        if (rawBytes) {
+          dataUri = decodeEmfWmfToDataUri(rawBytes);
+        }
       }
 
-      const base64 = await zip.file(path)?.async('base64');
-      if (base64) {
-        const dataUri = `data:${mime};base64,${base64}`;
+      if (!dataUri) {
+        const base64 = await zip.file(path)?.async('base64');
+        if (base64) {
+          dataUri = `data:${mime};base64,${base64}`;
+        }
+      }
+
+      if (dataUri) {
         orderedImages.push(dataUri);
 
         const fileName = path.split('/').pop() || '';
