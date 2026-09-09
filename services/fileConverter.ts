@@ -630,19 +630,25 @@ async function extractDocxMediaMap(arrayBuffer: ArrayBuffer): Promise<{
       const relXml = await zip.file(relPath)?.async('string');
       if (!relXml) continue;
 
-      // Parsing delle relazioni XML: <Relationship Id="rIdX" ... Target="media/imageY.png"/>
-      const relMatches = relXml.matchAll(/<Relationship\s+[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"[^>]*\/>/g);
-      for (const match of relMatches) {
-        const relId = match[1];
-        const target = match[2];
-        const targetFilename = target.split('/').pop()?.toLowerCase() || '';
+      // Parsing robusto delle relazioni XML, indipendente dall'ordine degli attributi e da namespace o self-closing tags
+      const relTagRegex = /<Relationship\b([^>]+)(?:\/>|>[\s\S]*?<\/Relationship>)/gi;
+      let match: RegExpExecArray | null;
+      while ((match = relTagRegex.exec(relXml)) !== null) {
+        const attrs = match[1];
+        const idMatch = attrs.match(/\bId="([^"]+)"/i);
+        const targetMatch = attrs.match(/\bTarget="([^"]+)"/i);
+        if (idMatch && targetMatch) {
+          const relId = idMatch[1];
+          const target = targetMatch[1];
+          const targetFilename = target.split('/').pop()?.toLowerCase() || '';
 
-        if (mediaMap.has(targetFilename)) {
-          const dataUri = mediaMap.get(targetFilename)!;
-          mediaMap.set(relId, dataUri);
-          mediaMap.set(relId.toLowerCase(), dataUri);
-          const relBase = relPath.replace(/^word\//, '').replace(/^_rels\//, '').replace(/\.rels$/, '');
-          mediaMap.set(`${relBase}:${relId}`.toLowerCase(), dataUri);
+          if (mediaMap.has(targetFilename)) {
+            const dataUri = mediaMap.get(targetFilename)!;
+            mediaMap.set(relId, dataUri);
+            mediaMap.set(relId.toLowerCase(), dataUri);
+            const relBase = relPath.replace(/^word\//, '').replace(/^_rels\//, '').replace(/\.rels$/, '');
+            mediaMap.set(`${relBase}:${relId}`.toLowerCase(), dataUri);
+          }
         }
       }
     }
@@ -777,12 +783,13 @@ async function renderDocxWithHighFidelity(arrayBuffer: ArrayBuffer): Promise<Arr
   const { mediaMap, orderedImages } = await extractDocxMediaMap(arrayBuffer);
 
   // 3. Crea un contenitore montato ma isolato con larghezza A4 esatta (210mm)
-  // Usiamo left: -9999px con visibilità 1 e opacità 1 per evitare che il browser applichi 'GPU rasterization skip' sulle immagini
+  // Usiamo zIndex negativo e clipping controllato per garantire piena renderizzazione GPU in produzione
   const container = document.createElement('div');
   container.setAttribute('data-docx-render-stage', 'true');
   container.style.position = 'fixed';
-  container.style.left = '-9999px';
+  container.style.left = '0';
   container.style.top = '0';
+  container.style.zIndex = '-9999';
   container.style.width = '210mm'; // Standard ISO A4 esatto (793.7px @ 96 DPI)
   container.style.minWidth = '210mm';
   container.style.background = '#ffffff';
