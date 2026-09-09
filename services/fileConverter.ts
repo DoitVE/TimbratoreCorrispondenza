@@ -432,10 +432,11 @@ async function ensureMetricCompatibleFontsLoaded(): Promise<void> {
 }
 
 /**
- * Estrae una mappa di immagini/loghi (Base64 data URI) direttamente dai media e dalle relazioni dell'archivio DOCX.
+ * Estrae una mappa completa di immagini/loghi (Base64 data URI) direttamente dai media e dalle relazioni dell'archivio DOCX.
  * Mappa:
  * 1. Percorsi file: 'word/media/image1.png', 'media/image1.png', 'image1.png'
  * 2. ID di relazione Word: 'rId1', 'rIdImg1', ecc. estratti da tutti i file .rels (document, header, footer)
+ * 3. Array ordinato di tutte le immagini Base64 trovate nel file
  */
 async function extractDocxMediaMap(arrayBuffer: ArrayBuffer): Promise<{
   mediaMap: Map<string, string>;
@@ -450,12 +451,12 @@ async function extractDocxMediaMap(arrayBuffer: ArrayBuffer): Promise<{
     // 1. Estrai tutti i file binari da word/media/
     const mediaFiles: string[] = [];
     zip.forEach((path) => {
-      if (path.startsWith('word/media/') && !path.endsWith('/')) {
+      if (path.toLowerCase().includes('media/') && !path.endsWith('/')) {
         mediaFiles.push(path);
       }
     });
 
-    // Ordina i file media per nome (es. image1, image2)
+    // Ordina i file media per nome numerico (es. image1.png, image2.png)
     mediaFiles.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
     for (const path of mediaFiles) {
@@ -466,6 +467,7 @@ async function extractDocxMediaMap(arrayBuffer: ArrayBuffer): Promise<{
       else if (lower.endsWith('.svg')) mime = 'image/svg+xml';
       else if (lower.endsWith('.webp')) mime = 'image/webp';
       else if (lower.endsWith('.bmp')) mime = 'image/bmp';
+      else if (lower.endsWith('.emf') || lower.endsWith('.wmf')) mime = 'image/png';
 
       const base64 = await zip.file(path)?.async('base64');
       if (base64) {
@@ -482,7 +484,7 @@ async function extractDocxMediaMap(arrayBuffer: ArrayBuffer): Promise<{
       }
     }
 
-    // 2. Analizza tutti i file di relazione (.rels) per collegare gli rId (es. rIdImg1, rId4) alle immagini
+    // 2. Analizza TUTTI i file di relazione (.rels) compresi footer, header e document
     const relFiles: string[] = [];
     zip.forEach((path) => {
       if (path.endsWith('.rels')) {
@@ -505,6 +507,8 @@ async function extractDocxMediaMap(arrayBuffer: ArrayBuffer): Promise<{
           const dataUri = mediaMap.get(targetFilename)!;
           mediaMap.set(relId, dataUri);
           mediaMap.set(relId.toLowerCase(), dataUri);
+          const relBase = relPath.replace(/^word\//, '').replace(/^_rels\//, '').replace(/\.rels$/, '');
+          mediaMap.set(`${relBase}:${relId}`.toLowerCase(), dataUri);
         }
       }
     }
@@ -517,7 +521,7 @@ async function extractDocxMediaMap(arrayBuffer: ArrayBuffer): Promise<{
 
 /**
  * Assicura che tutte le immagini e i loghi all'interno del contenitore siano completamente
- * caricati, corretti da mediaMap (se non valorizzati da docx-preview) e decodificati in memoria grafica.
+ * valorizzati con Base64 Data URL puro e decodificati in memoria grafica prima dello scatto canvas.
  */
 async function ensureAllImagesLoaded(
   container: HTMLElement,
@@ -530,7 +534,8 @@ async function ensureAllImagesLoaded(
   let fallbackIndex = 0;
 
   // 1. Processa tutti gli elementi <img>
-  for (const img of imgElements) {
+  for (let i = 0; i < imgElements.length; i++) {
+    const img = imgElements[i];
     img.crossOrigin = 'anonymous';
     img.loading = 'eager';
 
@@ -538,36 +543,29 @@ async function ensureAllImagesLoaded(
     const alt = (img.getAttribute('alt') || '').trim().toLowerCase();
     const title = (img.getAttribute('title') || '').trim().toLowerCase();
 
-    // Se l'immagine non ha src valido o è rimasto un ID (es. rId...)
-    const isInvalidSrc =
-      !currentSrc ||
-      currentSrc === 'about:blank' ||
-      currentSrc === 'null' ||
-      currentSrc === 'undefined' ||
-      currentSrc.startsWith('rId');
+    // Cerca se esiste una corrispondenza nei media estratti dal DOCX
+    let bestDataUri: string | null = null;
 
-    if (isInvalidSrc) {
-      if (currentSrc && mediaMap.has(currentSrc.toLowerCase())) {
-        img.src = mediaMap.get(currentSrc.toLowerCase())!;
-      } else if (alt && mediaMap.has(alt)) {
-        img.src = mediaMap.get(alt)!;
-      } else if (title && mediaMap.has(title)) {
-        img.src = mediaMap.get(title)!;
-      } else if (fallbackIndex < orderedImages.length) {
-        img.src = orderedImages[fallbackIndex++];
-      }
-    } else if (currentSrc.startsWith('blob:')) {
-      // Se è un Blob URL, prova ad abbinare per filename o alt a un Base64 Data URL per massima stabilità
-      const matched =
-        (alt && mediaMap.get(alt)) ||
-        (title && mediaMap.get(title)) ||
-        (fallbackIndex < orderedImages.length ? orderedImages[fallbackIndex++] : null);
-      if (matched) {
-        img.src = matched;
+    if (currentSrc && mediaMap.has(currentSrc.toLowerCase())) {
+      bestDataUri = mediaMap.get(currentSrc.toLowerCase())!;
+    } else if (alt && mediaMap.has(alt)) {
+      bestDataUri = mediaMap.get(alt)!;
+    } else if (title && mediaMap.has(title)) {
+      bestDataUri = mediaMap.get(title)!;
+    } else if (currentSrc.startsWith('blob:') && i < orderedImages.length) {
+      // Se è un Blob URL, sostituisci con il Data URL Base64 corrispondente per evitare blocchi CORS/Canvas-taint
+      bestDataUri = orderedImages[i];
+    } else if (!currentSrc || currentSrc === 'about:blank' || currentSrc.startsWith('rId')) {
+      if (fallbackIndex < orderedImages.length) {
+        bestDataUri = orderedImages[fallbackIndex++];
       }
     }
 
-    // Assicura stili di visibilità corretti
+    if (bestDataUri) {
+      img.src = bestDataUri;
+    }
+
+    // Forza le proprietà visive dell'immagine
     img.style.visibility = 'visible';
     img.style.opacity = '1';
     if (!img.style.display || img.style.display === 'none') {
@@ -577,13 +575,18 @@ async function ensureAllImagesLoaded(
   }
 
   // 2. Processa eventuali tag SVG <image>
-  for (const svgImg of svgImages) {
+  for (let i = 0; i < svgImages.length; i++) {
+    const svgImg = svgImages[i];
     const href = svgImg.getAttribute('href') || svgImg.getAttribute('xlink:href') || '';
-    if (!href || href.startsWith('rId')) {
-      const match = (href && mediaMap.get(href.toLowerCase())) || (fallbackIndex < orderedImages.length ? orderedImages[fallbackIndex++] : null);
-      if (match) {
-        svgImg.setAttribute('href', match);
-      }
+    let bestDataUri: string | null = null;
+    if (href && mediaMap.has(href.toLowerCase())) {
+      bestDataUri = mediaMap.get(href.toLowerCase())!;
+    } else if (i < orderedImages.length) {
+      bestDataUri = orderedImages[i];
+    }
+    if (bestDataUri) {
+      svgImg.setAttribute('href', bestDataUri);
+      svgImg.setAttribute('xlink:href', bestDataUri);
     }
   }
 
@@ -610,7 +613,7 @@ async function ensureAllImagesLoaded(
 
         img.addEventListener('load', onFinish);
         img.addEventListener('error', onFinish);
-        setTimeout(onFinish, 1500);
+        setTimeout(onFinish, 1200);
       });
     } catch {
       // Non bloccare in caso di singola immagine anomala
