@@ -264,18 +264,199 @@ function extractTextFromBinaryDoc(buffer: ArrayBuffer): string {
 }
 
 /**
- * Estrae una mappa di immagini/loghi (Base64 data URI) direttamente dai media dell'archivio DOCX
+ * Inietta le regole @font-face per i font Microsoft Office (Calibri, Aptos, Cambria, Times, Arial)
+ * mappandoli sui font web a metrica compatibile (Carlito, Caladea, Tinos, Arimo) e normalizza
+ * l'interlinea e il box model tipico di Word.
  */
-async function extractDocxMediaMap(arrayBuffer: ArrayBuffer): Promise<Map<string, string>> {
+async function ensureMetricCompatibleFontsLoaded(): Promise<void> {
+  if (typeof document === 'undefined') return;
+
+  const styleId = 'docx-metric-compatible-fonts';
+  if (!document.getElementById(styleId)) {
+    const styleEl = document.createElement('style');
+    styleEl.id = styleId;
+    styleEl.textContent = `
+      /* Calibri -> Carlito (metrica e kerning 100% identici) */
+      @font-face {
+        font-family: 'Calibri';
+        font-style: normal;
+        font-weight: 400;
+        src: local('Calibri'), local('Carlito'), local('Carlito Regular'),
+             url('https://fonts.gstatic.com/s/carlito/v4/3Jn9SDPw3m-pk039DDeBTA.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Calibri';
+        font-style: normal;
+        font-weight: 700;
+        src: local('Calibri Bold'), local('Carlito Bold'),
+             url('https://fonts.gstatic.com/s/carlito/v4/3Jn4SDPw3m-pk039BIykWXolUw.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Calibri';
+        font-style: italic;
+        font-weight: 400;
+        src: local('Calibri Italic'), local('Carlito Italic'),
+             url('https://fonts.gstatic.com/s/carlito/v4/3Jn_SDPw3m-pk039DDKxTl0A.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Calibri';
+        font-style: italic;
+        font-weight: 700;
+        src: local('Calibri Bold Italic'), local('Carlito Bold Italic'),
+             url('https://fonts.gstatic.com/s/carlito/v4/3Jn6SDPw3m-pk039DDK59XgVUcBG.woff2') format('woff2');
+      }
+
+      /* Aptos (nuovo default Word 365) -> fallback coerente Aptos, Calibri, Carlito */
+      @font-face {
+        font-family: 'Aptos';
+        font-style: normal;
+        font-weight: 400;
+        src: local('Aptos'), local('Calibri'), local('Carlito'),
+             url('https://fonts.gstatic.com/s/carlito/v4/3Jn9SDPw3m-pk039DDeBTA.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Aptos';
+        font-style: normal;
+        font-weight: 700;
+        src: local('Aptos Bold'), local('Calibri Bold'), local('Carlito Bold'),
+             url('https://fonts.gstatic.com/s/carlito/v4/3Jn4SDPw3m-pk039BIykWXolUw.woff2') format('woff2');
+      }
+
+      /* Cambria -> Caladea (metrica e kerning 100% identici) */
+      @font-face {
+        font-family: 'Cambria';
+        font-style: normal;
+        font-weight: 400;
+        src: local('Cambria'), local('Caladea'), local('Caladea Regular'),
+             url('https://fonts.gstatic.com/s/caladea/v10/kJEsBugZ7AAjhybUvRZB.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Cambria';
+        font-style: normal;
+        font-weight: 700;
+        src: local('Cambria Bold'), local('Caladea Bold'),
+             url('https://fonts.gstatic.com/s/caladea/v10/kJEwBugZ7AAjhybUrT19_7F0.woff2') format('woff2');
+      }
+
+      /* Times New Roman -> Tinos */
+      @font-face {
+        font-family: 'Times New Roman';
+        font-style: normal;
+        font-weight: 400;
+        src: local('Times New Roman'), local('Tinos'),
+             url('https://fonts.gstatic.com/s/tinos/v26/buE4poGnedXvwjX7fmQ.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Times New Roman';
+        font-style: normal;
+        font-weight: 700;
+        src: local('Times New Roman Bold'), local('Tinos Bold'),
+             url('https://fonts.gstatic.com/s/tinos/v26/buE1poGnedXvwj1AW3Fu0C8.woff2') format('woff2');
+      }
+
+      /* Arial -> Arimo */
+      @font-face {
+        font-family: 'Arial';
+        font-style: normal;
+        font-weight: 400;
+        src: local('Arial'), local('Arimo'),
+             url('https://fonts.gstatic.com/s/arimo/v36/P5sfzZCDf9_T_3cV7NCUECyoxNk37cxsBw.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Arial';
+        font-style: normal;
+        font-weight: 700;
+        src: local('Arial Bold'), local('Arimo Bold'),
+             url('https://fonts.gstatic.com/s/arimo/v36/P5sfzZCDf9_T_3cV7NCUECyoxNk3CstsBw.woff2') format('woff2');
+      }
+
+      /* Normalizzazione tipografica Word e compattazione layout */
+      .docx {
+        font-family: 'Calibri', 'Carlito', Arial, sans-serif;
+        line-height: 1.15 !important;
+        letter-spacing: -0.015em !important;
+        font-feature-settings: "kern" 1;
+        text-rendering: geometricPrecision !important;
+        -webkit-font-smoothing: antialiased !important;
+        -moz-osx-font-smoothing: grayscale !important;
+      }
+
+      .docx p {
+        line-height: inherit;
+        margin-top: 0;
+        margin-bottom: 0pt;
+      }
+
+      .docx span {
+        letter-spacing: inherit;
+      }
+
+      .docx table {
+        border-collapse: collapse !important;
+        table-layout: auto !important;
+      }
+
+      .docx table td, .docx table th {
+        box-sizing: border-box !important;
+        vertical-align: top !important;
+      }
+
+      .docx-wrapper {
+        background: #ffffff !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+
+      section.docx {
+        box-shadow: none !important;
+        margin: 0 !important;
+        margin-bottom: 0 !important;
+        box-sizing: border-box !important;
+        background: #ffffff !important;
+      }
+    `;
+    document.head.appendChild(styleEl);
+  }
+
+  // Attende che le metriche font siano pronte nel browser
+  if ('fonts' in document) {
+    try {
+      await Promise.race([
+        document.fonts.ready,
+        new Promise((resolve) => setTimeout(resolve, 2000)),
+      ]);
+    } catch {
+      // Prosegui comunque in caso di browser con restrizioni di rete
+    }
+  }
+}
+
+/**
+ * Estrae una mappa di immagini/loghi (Base64 data URI) direttamente dai media e dalle relazioni dell'archivio DOCX.
+ * Mappa:
+ * 1. Percorsi file: 'word/media/image1.png', 'media/image1.png', 'image1.png'
+ * 2. ID di relazione Word: 'rId1', 'rIdImg1', ecc. estratti da tutti i file .rels (document, header, footer)
+ */
+async function extractDocxMediaMap(arrayBuffer: ArrayBuffer): Promise<{
+  mediaMap: Map<string, string>;
+  orderedImages: string[];
+}> {
   const mediaMap = new Map<string, string>();
+  const orderedImages: string[] = [];
+
   try {
     const zip = await JSZip.loadAsync(arrayBuffer);
+
+    // 1. Estrai tutti i file binari da word/media/
     const mediaFiles: string[] = [];
     zip.forEach((path) => {
       if (path.startsWith('word/media/') && !path.endsWith('/')) {
         mediaFiles.push(path);
       }
     });
+
+    // Ordina i file media per nome (es. image1, image2)
+    mediaFiles.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
     for (const path of mediaFiles) {
       const lower = path.toLowerCase();
@@ -289,48 +470,124 @@ async function extractDocxMediaMap(arrayBuffer: ArrayBuffer): Promise<Map<string
       const base64 = await zip.file(path)?.async('base64');
       if (base64) {
         const dataUri = `data:${mime};base64,${base64}`;
-        // Registra con percorso completo, solo filename e lowercase
+        orderedImages.push(dataUri);
+
         const fileName = path.split('/').pop() || '';
         mediaMap.set(path, dataUri);
+        mediaMap.set(path.toLowerCase(), dataUri);
+        mediaMap.set(`media/${fileName}`, dataUri);
+        mediaMap.set(`media/${fileName}`.toLowerCase(), dataUri);
         mediaMap.set(fileName, dataUri);
         mediaMap.set(fileName.toLowerCase(), dataUri);
       }
     }
+
+    // 2. Analizza tutti i file di relazione (.rels) per collegare gli rId (es. rIdImg1, rId4) alle immagini
+    const relFiles: string[] = [];
+    zip.forEach((path) => {
+      if (path.endsWith('.rels')) {
+        relFiles.push(path);
+      }
+    });
+
+    for (const relPath of relFiles) {
+      const relXml = await zip.file(relPath)?.async('string');
+      if (!relXml) continue;
+
+      // Parsing delle relazioni XML: <Relationship Id="rIdX" ... Target="media/imageY.png"/>
+      const relMatches = relXml.matchAll(/<Relationship\s+[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"[^>]*\/>/g);
+      for (const match of relMatches) {
+        const relId = match[1];
+        const target = match[2];
+        const targetFilename = target.split('/').pop()?.toLowerCase() || '';
+
+        if (mediaMap.has(targetFilename)) {
+          const dataUri = mediaMap.get(targetFilename)!;
+          mediaMap.set(relId, dataUri);
+          mediaMap.set(relId.toLowerCase(), dataUri);
+        }
+      }
+    }
   } catch (err) {
-    console.warn('Estrazione media secondaria non riuscita:', err);
+    console.warn('Estrazione media e relazioni DOCX non riuscita:', err);
   }
-  return mediaMap;
+
+  return { mediaMap, orderedImages };
 }
 
 /**
  * Assicura che tutte le immagini e i loghi all'interno del contenitore siano completamente
- * caricati e decodificati in memoria grafica prima dello scatto di html2canvas.
+ * caricati, corretti da mediaMap (se non valorizzati da docx-preview) e decodificati in memoria grafica.
  */
-async function ensureAllImagesLoaded(container: HTMLElement, mediaMap: Map<string, string>): Promise<void> {
+async function ensureAllImagesLoaded(
+  container: HTMLElement,
+  mediaMap: Map<string, string>,
+  orderedImages: string[]
+): Promise<void> {
   const imgElements = Array.from(container.querySelectorAll<HTMLImageElement>('img'));
-  if (imgElements.length === 0) return;
+  const svgImages = Array.from(container.querySelectorAll<SVGImageElement>('image'));
 
-  // Assegna il fallback se qualche immagine è vuota o ha perso il src
   let fallbackIndex = 0;
-  const mediaValues = Array.from(mediaMap.values());
 
+  // 1. Processa tutti gli elementi <img>
   for (const img of imgElements) {
     img.crossOrigin = 'anonymous';
     img.loading = 'eager';
 
-    const currentSrc = img.getAttribute('src') || '';
-    if (!currentSrc || currentSrc === 'about:blank') {
-      // Se l'immagine non ha src, abbina per nome o per ordine dai media estratti
-      const alt = img.getAttribute('alt') || '';
-      if (alt && mediaMap.has(alt.toLowerCase())) {
-        img.src = mediaMap.get(alt.toLowerCase())!;
-      } else if (fallbackIndex < mediaValues.length) {
-        img.src = mediaValues[fallbackIndex++];
+    const currentSrc = (img.getAttribute('src') || '').trim();
+    const alt = (img.getAttribute('alt') || '').trim().toLowerCase();
+    const title = (img.getAttribute('title') || '').trim().toLowerCase();
+
+    // Se l'immagine non ha src valido o è rimasto un ID (es. rId...)
+    const isInvalidSrc =
+      !currentSrc ||
+      currentSrc === 'about:blank' ||
+      currentSrc === 'null' ||
+      currentSrc === 'undefined' ||
+      currentSrc.startsWith('rId');
+
+    if (isInvalidSrc) {
+      if (currentSrc && mediaMap.has(currentSrc.toLowerCase())) {
+        img.src = mediaMap.get(currentSrc.toLowerCase())!;
+      } else if (alt && mediaMap.has(alt)) {
+        img.src = mediaMap.get(alt)!;
+      } else if (title && mediaMap.has(title)) {
+        img.src = mediaMap.get(title)!;
+      } else if (fallbackIndex < orderedImages.length) {
+        img.src = orderedImages[fallbackIndex++];
+      }
+    } else if (currentSrc.startsWith('blob:')) {
+      // Se è un Blob URL, prova ad abbinare per filename o alt a un Base64 Data URL per massima stabilità
+      const matched =
+        (alt && mediaMap.get(alt)) ||
+        (title && mediaMap.get(title)) ||
+        (fallbackIndex < orderedImages.length ? orderedImages[fallbackIndex++] : null);
+      if (matched) {
+        img.src = matched;
+      }
+    }
+
+    // Assicura stili di visibilità corretti
+    img.style.visibility = 'visible';
+    img.style.opacity = '1';
+    if (!img.style.display || img.style.display === 'none') {
+      img.style.display = 'inline-block';
+    }
+    img.style.maxWidth = '100%';
+  }
+
+  // 2. Processa eventuali tag SVG <image>
+  for (const svgImg of svgImages) {
+    const href = svgImg.getAttribute('href') || svgImg.getAttribute('xlink:href') || '';
+    if (!href || href.startsWith('rId')) {
+      const match = (href && mediaMap.get(href.toLowerCase())) || (fallbackIndex < orderedImages.length ? orderedImages[fallbackIndex++] : null);
+      if (match) {
+        svgImg.setAttribute('href', match);
       }
     }
   }
 
-  // Attende che tutte le immagini abbiano terminato il caricamento e la decodifica grafica
+  // 3. Attende che tutte le immagini abbiano completato la decodifica grafica
   const loadPromises = imgElements.map(async (img) => {
     try {
       if (img.complete && img.naturalWidth > 0) {
@@ -353,11 +610,10 @@ async function ensureAllImagesLoaded(container: HTMLElement, mediaMap: Map<strin
 
         img.addEventListener('load', onFinish);
         img.addEventListener('error', onFinish);
-        // Timeout di sicurezza di 1.5 secondi per immagine
         setTimeout(onFinish, 1500);
       });
     } catch {
-      // Non bloccare in caso di singola immagine non decodificabile
+      // Non bloccare in caso di singola immagine anomala
     }
   });
 
@@ -375,20 +631,24 @@ async function renderDocxWithHighFidelity(arrayBuffer: ArrayBuffer): Promise<Arr
     throw new Error('Ambiente browser non disponibile.');
   }
 
-  // Estrai preventivamente la mappa di tutte le immagini e loghi presenti nel pacchetto Word
-  const mediaMap = await extractDocxMediaMap(arrayBuffer);
+  // 1. Assicura il caricamento preventivo dei font a metrica compatibile (Carlito, Caladea, Tinos, Arimo)
+  await ensureMetricCompatibleFontsLoaded();
 
-  // Crea un contenitore montato nel DOM ma non invasivo visivamente (con clip per rendering browser completo)
+  // 2. Estrai preventivamente la mappa di tutte le immagini e loghi presenti nel pacchetto Word
+  const { mediaMap, orderedImages } = await extractDocxMediaMap(arrayBuffer);
+
+  // 3. Crea un contenitore montato a livello background con larghezza A4 esatta (210mm)
   const container = document.createElement('div');
   container.setAttribute('data-docx-render-stage', 'true');
   container.style.position = 'fixed';
   container.style.left = '0';
   container.style.top = '0';
-  container.style.width = '816px'; // standard A4/Letter a 96 DPI
+  container.style.width = '210mm'; // Standard ISO A4 esatto (793.7px @ 96 DPI)
+  container.style.minWidth = '210mm';
   container.style.background = '#ffffff';
   container.style.color = '#000000';
   container.style.zIndex = '-99999';
-  container.style.opacity = '0.01'; // visibile al browser engine ma trasparente all'utente
+  container.style.opacity = '1'; // CRITICO: 1 per permettere a html2canvas di fotografare i pixel a piena saturazione
   container.style.pointerEvents = 'none';
   container.style.overflow = 'visible';
   container.style.boxSizing = 'border-box';
@@ -402,6 +662,7 @@ async function renderDocxWithHighFidelity(arrayBuffer: ArrayBuffer): Promise<Arr
       ignoreHeight: false,
       ignoreFonts: false,
       breakPages: true,
+      ignoreLastRenderedPageBreak: false, // Rispetta i salti pagina nativi calcolati da Microsoft Word!
       experimental: true,
       trimXmlDeclaration: true,
       renderHeaders: true,
@@ -419,7 +680,7 @@ async function renderDocxWithHighFidelity(arrayBuffer: ArrayBuffer): Promise<Arr
     }
 
     // Assicura il caricamento e decodifica completa di tutti i loghi e immagini
-    await ensureAllImagesLoaded(container, mediaMap);
+    await ensureAllImagesLoaded(container, mediaMap, orderedImages);
 
     // Breve stabilizzazione per il completamento del reflow del DOM
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -435,17 +696,36 @@ async function renderDocxWithHighFidelity(arrayBuffer: ArrayBuffer): Promise<Arr
     const a4HeightPt = 841.89;
 
     for (const section of sections) {
-      // Elimina ombre e margini di anteprima schermo
+      // Elimina ombre e margini di anteprima schermo per una stampa PDF pulita
       section.style.boxShadow = 'none';
       section.style.margin = '0';
       section.style.marginBottom = '0';
 
       const canvas = await html2canvas(section, {
-        scale: 2, // Scala 2x per garantire testo e linee grafiche nitide (192 DPI)
+        scale: 2, // Scala 2x per garantire testo, loghi e linee grafiche nitide (192 DPI)
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
+        onclone: (clonedDoc) => {
+          // Nel documento clonato interno di html2canvas, assicura che il contenitore sia al 100% visibile
+          const clonedContainer = clonedDoc.querySelector('[data-docx-render-stage="true"]') as HTMLElement | null;
+          if (clonedContainer) {
+            clonedContainer.style.opacity = '1';
+            clonedContainer.style.visibility = 'visible';
+          }
+          // Copia i Data URL verificati su tutte le immagini clonate
+          const clonedImgs = clonedDoc.querySelectorAll<HTMLImageElement>('img');
+          const origImgs = section.querySelectorAll<HTMLImageElement>('img');
+          clonedImgs.forEach((cImg, idx) => {
+            const orig = origImgs[idx];
+            if (orig && orig.src) {
+              cImg.src = orig.src;
+            }
+            cImg.style.visibility = 'visible';
+            cImg.style.opacity = '1';
+          });
+        },
       });
 
       if (canvas.width <= 0 || canvas.height <= 0) continue;
@@ -456,22 +736,41 @@ async function renderDocxWithHighFidelity(arrayBuffer: ArrayBuffer): Promise<Arr
       const targetRatio = pageHeight / pageWidth;
       const pageCanvasHeight = Math.round(canvas.width * targetRatio);
 
-      if (canvas.height <= pageCanvasHeight * 1.08) {
-        // Sezione che entra esattamente in una pagina A4
+      // Criterio di forzatura 1:1 Pagina Word -> Pagina PDF:
+      // Se docx-preview ha già separato il documento in sezioni/pagine (sections.length > 1),
+      // ciascuna sezione corrisponde nativamente a una specifica pagina del documento Word.
+      // Anche per documenti a sezione singola, se l'altezza rientra fino al 145% di un A4 (espansione tipica del DOM/font web),
+      // forziamo l'intero contenuto della pagina Word in una singola pagina PDF (Fit-to-Page).
+      // In questo modo, la prima e l'ultima parola di ciascun foglio Word restano rigorosamente nel loro rispettivo foglio PDF.
+      const isMultiPageSection = canvas.height > pageCanvasHeight * (sections.length > 1 ? 1.70 : 1.45);
+
+      if (!isMultiPageSection) {
+        // Sezione che corrisponde a una singola pagina Word: la adattiamo esattamente alla singola pagina A4
         const imgDataUrl = canvas.toDataURL('image/jpeg', 0.95);
         const imgBase64 = imgDataUrl.split(',')[1];
         const imgBytes = Uint8Array.from(atob(imgBase64), (c) => c.charCodeAt(0));
         const embeddedImg = await pdfDoc.embedJpg(imgBytes);
 
         const page = pdfDoc.addPage([pageWidth, pageHeight]);
+        // Calcola la scala proporzionale per racchiudere tutto il foglio Word nella pagina PDF senza distorsioni
+        const scaleX = pageWidth / canvas.width;
+        const scaleY = pageHeight / canvas.height;
+        const scale = Math.min(scaleX, scaleY);
+
+        const drawWidth = canvas.width * scale;
+        const drawHeight = canvas.height * scale;
+        const drawX = (pageWidth - drawWidth) / 2;
+        // In pdf-lib l'origine (0,0) è in basso a sinistra: allinea il documento in alto alla pagina
+        const drawY = pageHeight - drawHeight;
+
         page.drawImage(embeddedImg, {
-          x: 0,
-          y: 0,
-          width: pageWidth,
-          height: pageHeight,
+          x: drawX,
+          y: drawY,
+          width: drawWidth,
+          height: drawHeight,
         });
       } else {
-        // Sezione continua multi-pagina: impagina a fette di altezza A4
+        // Sezione continua multi-pagina (documento privo di salti pagina nativi): impagina a fette di altezza A4
         const totalPages = Math.ceil(canvas.height / pageCanvasHeight);
         for (let p = 0; p < totalPages; p++) {
           const sliceH = Math.min(pageCanvasHeight, canvas.height - p * pageCanvasHeight);
