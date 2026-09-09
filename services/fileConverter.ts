@@ -4,6 +4,8 @@
  * e conversione ad alta fedeltà con fallback automatico.
  */
 import * as mammoth from 'mammoth';
+import * as docx from 'docx-preview';
+import html2canvas from 'html2canvas';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 export interface ProcessedDocumentFile {
@@ -261,10 +263,164 @@ function extractTextFromBinaryDoc(buffer: ArrayBuffer): string {
 }
 
 /**
- * Converte un file Word (.docx / .doc) direttamente nel browser in un documento PDF impaginato
+ * Effettua il rendering grafico ad alta fedeltà di un file Word (.docx) direttamente nel browser.
+ * Utilizza docx-preview per interpretare il layout Word originale (tabelle con bordi, immagini,
+ * intestazioni, piè di pagina, colori, allineamenti, font) e html2canvas + pdf-lib per generare
+ * un PDF A4 ad alta risoluzione (192 DPI), senza passare per alcun server.
  */
-export async function convertDocxToPdfClientSide(file: File): Promise<ArrayBuffer> {
-  const arrayBuffer = await file.arrayBuffer();
+async function renderDocxWithHighFidelity(arrayBuffer: ArrayBuffer): Promise<ArrayBuffer> {
+  if (typeof document === 'undefined' || typeof window === 'undefined') {
+    throw new Error('Ambiente browser non disponibile.');
+  }
+
+  // Crea un contenitore isolato fuori dallo schermo
+  const container = document.createElement('div');
+  container.setAttribute('data-docx-render-stage', 'true');
+  container.style.position = 'fixed';
+  container.style.left = '-99999px';
+  container.style.top = '0';
+  container.style.width = '816px'; // standard A4/Letter a 96 DPI
+  container.style.background = '#ffffff';
+  container.style.color = '#000000';
+  container.style.zIndex = '-99999';
+  container.style.opacity = '1';
+  container.style.overflow = 'visible';
+  container.style.boxSizing = 'border-box';
+  document.body.appendChild(container);
+
+  try {
+    await docx.renderAsync(arrayBuffer, container, undefined, {
+      className: 'docx',
+      inWrapper: true,
+      ignoreWidth: false,
+      ignoreHeight: false,
+      ignoreFonts: false,
+      breakPages: true,
+      experimental: true,
+      trimXmlDeclaration: true,
+      renderHeaders: true,
+      renderFooters: true,
+      renderFootnotes: true,
+      renderEndnotes: true,
+      useBase64URL: true,
+    });
+
+    // Breve attesa per permettere il layout rendering, calcolo immagini e stili
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    const wrapper = container.querySelector<HTMLElement>('.docx-wrapper');
+    if (wrapper) {
+      wrapper.style.background = '#ffffff';
+      wrapper.style.padding = '0';
+      wrapper.style.margin = '0';
+    }
+
+    let sections = Array.from(container.querySelectorAll<HTMLElement>('section.docx'));
+    if (sections.length === 0) {
+      const fallbackTarget = wrapper || container;
+      sections = [fallbackTarget];
+    }
+
+    const pdfDoc = await PDFDocument.create();
+    const a4WidthPt = 595.28;
+    const a4HeightPt = 841.89;
+
+    for (const section of sections) {
+      // Elimina ombre e margini di anteprima schermo
+      section.style.boxShadow = 'none';
+      section.style.margin = '0';
+      section.style.marginBottom = '0';
+
+      const canvas = await html2canvas(section, {
+        scale: 2, // Scala 2x per garantire testo e linee grafiche nitide (192 DPI)
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+
+      if (canvas.width <= 0 || canvas.height <= 0) continue;
+
+      const isLandscape = canvas.width > canvas.height * 1.15;
+      const pageWidth = isLandscape ? a4HeightPt : a4WidthPt;
+      const pageHeight = isLandscape ? a4WidthPt : a4HeightPt;
+      const targetRatio = pageHeight / pageWidth;
+      const pageCanvasHeight = Math.round(canvas.width * targetRatio);
+
+      if (canvas.height <= pageCanvasHeight * 1.08) {
+        // Sezione che entra esattamente in una pagina A4
+        const imgDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        const imgBase64 = imgDataUrl.split(',')[1];
+        const imgBytes = Uint8Array.from(atob(imgBase64), (c) => c.charCodeAt(0));
+        const embeddedImg = await pdfDoc.embedJpg(imgBytes);
+
+        const page = pdfDoc.addPage([pageWidth, pageHeight]);
+        page.drawImage(embeddedImg, {
+          x: 0,
+          y: 0,
+          width: pageWidth,
+          height: pageHeight,
+        });
+      } else {
+        // Sezione continua multi-pagina: impagina a fette di altezza A4
+        const totalPages = Math.ceil(canvas.height / pageCanvasHeight);
+        for (let p = 0; p < totalPages; p++) {
+          const sliceH = Math.min(pageCanvasHeight, canvas.height - p * pageCanvasHeight);
+          if (sliceH <= 10) continue;
+
+          const sliceCanvas = document.createElement('canvas');
+          sliceCanvas.width = canvas.width;
+          sliceCanvas.height = pageCanvasHeight;
+          const sliceCtx = sliceCanvas.getContext('2d');
+          if (!sliceCtx) continue;
+
+          sliceCtx.fillStyle = '#ffffff';
+          sliceCtx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+          sliceCtx.drawImage(
+            canvas,
+            0,
+            p * pageCanvasHeight,
+            canvas.width,
+            sliceH,
+            0,
+            0,
+            canvas.width,
+            sliceH
+          );
+
+          const sliceDataUrl = sliceCanvas.toDataURL('image/jpeg', 0.95);
+          const sliceBase64 = sliceDataUrl.split(',')[1];
+          const sliceBytes = Uint8Array.from(atob(sliceBase64), (c) => c.charCodeAt(0));
+          const embeddedSlice = await pdfDoc.embedJpg(sliceBytes);
+
+          const page = pdfDoc.addPage([pageWidth, pageHeight]);
+          page.drawImage(embeddedSlice, {
+            x: 0,
+            y: 0,
+            width: pageWidth,
+            height: pageHeight,
+          });
+        }
+      }
+    }
+
+    if (pdfDoc.getPageCount() === 0) {
+      throw new Error('Nessuna pagina generata dal motore grafico.');
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    return pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength);
+  } finally {
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  }
+}
+
+/**
+ * Fallback testuale/strutturato per file Word (.doc legacy o formati non supportati da docx-preview)
+ */
+async function convertDocxToPdfTextFallback(file: File, arrayBuffer: ArrayBuffer): Promise<ArrayBuffer> {
   let rawText = '';
 
   try {
@@ -305,7 +461,7 @@ export async function convertDocxToPdfClientSide(file: File): Promise<ArrayBuffe
       x: margin,
       y: currentY,
       size: 14,
-      color: rgb(0.1, 0.15, 0.25)
+      color: rgb(0.1, 0.15, 0.25),
     },
     fontBold,
     allowedCodes
@@ -362,7 +518,7 @@ export async function convertDocxToPdfClientSide(file: File): Promise<ArrayBuffe
           x: margin,
           y: currentY,
           size: fontSize,
-          color: rgb(0.15, 0.15, 0.15)
+          color: rgb(0.15, 0.15, 0.15),
         },
         fontRegular,
         allowedCodes
@@ -373,6 +529,32 @@ export async function convertDocxToPdfClientSide(file: File): Promise<ArrayBuffe
 
   const pdfBytes = await pdfDoc.save();
   return pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength);
+}
+
+/**
+ * Converte un file Word (.docx / .doc) direttamente nel browser:
+ * 1. Prova prima il motore ad ALTA FEDELTÀ grafica (docx-preview: tabelle, immagini, layout, stili).
+ * 2. In caso di errore o formato legacy, ricorre al fallback testuale strutturato.
+ */
+export async function convertDocxToPdfClientSide(file: File): Promise<ArrayBuffer> {
+  const arrayBuffer = await file.arrayBuffer();
+
+  // Se è un file .docx moderno (archivio ZIP OOXML con signature PK)
+  const isZipDocx =
+    file.name.toLowerCase().endsWith('.docx') ||
+    (new Uint8Array(arrayBuffer.slice(0, 2))[0] === 0x50 &&
+      new Uint8Array(arrayBuffer.slice(0, 2))[1] === 0x4B);
+
+  if (isZipDocx) {
+    try {
+      return await renderDocxWithHighFidelity(arrayBuffer);
+    } catch (err) {
+      console.warn('Rendering ad alta fedeltà docx-preview non riuscito, ricorro al fallback testuale:', err);
+    }
+  }
+
+  // Fallback per file .doc legacy o documenti non convenzionali
+  return await convertDocxToPdfTextFallback(file, arrayBuffer);
 }
 
 /**
