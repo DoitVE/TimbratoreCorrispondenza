@@ -10,6 +10,7 @@ import { createStamp, StampType } from './services/stampUtils';
 import { PageData, DocumentData, StampData, AppMode, WorkMode } from './types';
 import { processSignatureImage } from './services/imageUtils';
 import { createArchiveJSON, parseArchiveJSON } from './services/dataUtils';
+import { processIncomingFile } from './services/fileConverter';
 
 const doitSignaturePath = "/timbri/DOIT_VE.png";
 
@@ -109,21 +110,32 @@ function App() {
           }
       }
 
-      const newDocs: DocumentData[] = fileList
-        .filter(f => f.type === 'application/pdf')
-        .map((file: File) => ({
+      const newDocs: DocumentData[] = [];
+      for (const file of fileList) {
+        if (file.name.endsWith('.json')) continue;
+        try {
+          const processed = await processIncomingFile(file);
+          newDocs.push({
             id: Math.random().toString(36).substr(2, 9),
-            file,
-            name: file.name,
+            file: processed.file,
+            name: processed.name,
             pages: [],
-            status: 'pending'
-        }));
+            status: 'pending',
+            pdfBytes: processed.pdfBytes
+          });
+        } catch (err: any) {
+          console.error(`Errore elaborazione file ${file.name}:`, err);
+          alert(`Impossibile aprire "${file.name}":\n${err.message || 'Formato non supportato o file non valido'}`);
+        }
+      }
 
-      setDocuments(prev => [...prev, ...newDocs]);
-      
-      if (currentDocIndex === -1 && newDocs.length > 0) {
-        setCurrentDocIndex(0);
-        setVisiblePageIndex(0);
+      if (newDocs.length > 0) {
+        setDocuments(prev => [...prev, ...newDocs]);
+        
+        if (currentDocIndex === -1) {
+          setCurrentDocIndex(0);
+          setVisiblePageIndex(0);
+        }
       }
   };
 

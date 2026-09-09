@@ -270,7 +270,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
               <input 
                 type="file" 
-                accept=".pdf" 
+                accept=".pdf,.p7m,.doc,.docx,.odt,.rtf,application/pdf,application/pkcs7-mime,application/x-pkcs7-mime,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
                 multiple
                 className="hidden" 
                 onChange={onUpload}
