@@ -166,17 +166,125 @@ export function extractPdfFromBytes(rawBuffer: ArrayBuffer): ArrayBuffer {
 }
 
 /**
- * Converte un file Word (.docx) direttamente nel browser in un documento PDF impaginato
+ * Sanitizza il testo per la codifica WinAnsi (Windows-1252) supportata dai font standard di pdf-lib.
+ * Sostituisce trattini non divisibili (0x2011), virgolette tipografiche, elenchi puntati e simboli Unicode
+ * con i rispettivi equivalenti compatibili, garantendo che non si verifichino errori WinAnsi.
+ */
+function sanitizeTextForFont(str: string, allowedCodes: Set<number>): string {
+  if (!str) return '';
+  const preProcessed = str
+    .replace(/[\u2010\u2011\u2012\u2212]/g, '-')
+    .replace(/[\u2013\u2014\u2015]/g, '-')
+    .replace(/[\u2018\u2019\u201A\u201B\u2032]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')
+    .replace(/[\u2022\u2023\u25E6\u2043\u2219\u25CF\u25CB\u25A0]/g, '-')
+    .replace(/[\u2026]/g, '...')
+    .replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000\uFEFF]/g, ' ')
+    .replace(/\t/g, '    ');
+
+  let result = '';
+  for (const ch of preProcessed) {
+    const code = ch.charCodeAt(0);
+    if (allowedCodes.has(code)) {
+      result += ch;
+    } else {
+      // Prova a scomporre (es. lettere con accenti particolari)
+      const decomp = ch.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+      if (decomp && allowedCodes.has(decomp.charCodeAt(0))) {
+        result += decomp;
+      } else {
+        result += ' ';
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Disegna testo su pagina PDF in modo sicuro al 100%, con fallback automatico anti-eccezione.
+ */
+function safeDrawText(
+  page: any,
+  text: string,
+  options: any,
+  font: any,
+  allowedCodes: Set<number>
+): void {
+  const sanitized = sanitizeTextForFont(text, allowedCodes);
+  if (!sanitized.trim()) return;
+
+  try {
+    page.drawText(sanitized, { ...options, font });
+  } catch {
+    try {
+      // Secondo tentativo: converti solo in ASCII stampabile
+      const asciiOnly = sanitized.replace(/[^\x20-\x7E]/g, ' ');
+      page.drawText(asciiOnly, { ...options, font });
+    } catch {
+      // Ignora se la riga è completamente indecifrabile per evitare crash
+    }
+  }
+}
+
+/**
+ * Estrae testo da file binario Word (.doc legacy) in caso di fallback da mammoth
+ */
+function extractTextFromBinaryDoc(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let text = '';
+  let curUtf16 = '';
+  for (let i = 0; i < bytes.length - 1; i += 2) {
+    const code = bytes[i] | (bytes[i + 1] << 8);
+    if ((code >= 32 && code <= 126) || (code >= 160 && code <= 255) || code === 10 || code === 13) {
+      curUtf16 += String.fromCharCode(code);
+    } else {
+      if (curUtf16.trim().length >= 4) text += curUtf16 + '\n';
+      curUtf16 = '';
+    }
+  }
+  if (curUtf16.trim().length >= 4) text += curUtf16 + '\n';
+
+  if (text.length < 50) {
+    let curAscii = '';
+    for (let i = 0; i < bytes.length; i++) {
+      const b = bytes[i];
+      if ((b >= 32 && b <= 126) || (b >= 160 && b <= 255) || b === 10 || b === 13) {
+        curAscii += String.fromCharCode(b);
+      } else {
+        if (curAscii.trim().length >= 4) text += curAscii + '\n';
+        curAscii = '';
+      }
+    }
+    if (curAscii.trim().length >= 4) text += curAscii + '\n';
+  }
+  return text;
+}
+
+/**
+ * Converte un file Word (.docx / .doc) direttamente nel browser in un documento PDF impaginato
  */
 export async function convertDocxToPdfClientSide(file: File): Promise<ArrayBuffer> {
   const arrayBuffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer });
-  const rawText = result.value || '';
+  let rawText = '';
+
+  try {
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    rawText = result.value || '';
+  } catch (extractErr) {
+    console.warn('Mammoth estrazione diretta non riuscita, tentativo di lettura binaria:', extractErr);
+    rawText = extractTextFromBinaryDoc(arrayBuffer);
+  }
+
+  if (!rawText.trim()) {
+    rawText = extractTextFromBinaryDoc(arrayBuffer);
+  }
+
   const lines = rawText.split(/\r?\n/);
 
   const pdfDoc = await PDFDocument.create();
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const allowedCodes = new Set(fontRegular.getCharacterSet());
 
   const pageWidth = 595.28; // A4 width in pt
   const pageHeight = 841.89; // A4 height in pt
@@ -188,14 +296,20 @@ export async function convertDocxToPdfClientSide(file: File): Promise<ArrayBuffe
   let currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
   let currentY = pageHeight - margin;
 
-  // Intestazione del documento
-  currentPage.drawText(file.name.replace(/\.(docx|doc)$/i, ''), {
-    x: margin,
-    y: currentY,
-    size: 14,
-    font: fontBold,
-    color: rgb(0.1, 0.15, 0.25)
-  });
+  // Intestazione del documento con sanitizzazione del nome file
+  const docTitle = file.name.replace(/\.(docx|doc|odt|rtf)$/i, '');
+  safeDrawText(
+    currentPage,
+    docTitle,
+    {
+      x: margin,
+      y: currentY,
+      size: 14,
+      color: rgb(0.1, 0.15, 0.25)
+    },
+    fontBold,
+    allowedCodes
+  );
   currentY -= 28;
 
   const wrapText = (text: string, width: number): string[] => {
@@ -204,13 +318,20 @@ export async function convertDocxToPdfClientSide(file: File): Promise<ArrayBuffe
     let currentLine = '';
 
     for (const word of words) {
-      const testLine = currentLine ? `${currentLine} ${word}` : word;
-      const textWidth = fontRegular.widthOfTextAtSize(testLine, fontSize);
+      const sanitizedWord = sanitizeTextForFont(word, allowedCodes);
+      const testLine = currentLine ? `${currentLine} ${sanitizedWord}` : sanitizedWord;
+      let textWidth = 0;
+      try {
+        textWidth = fontRegular.widthOfTextAtSize(testLine, fontSize);
+      } catch {
+        textWidth = testLine.length * (fontSize * 0.55);
+      }
+
       if (textWidth <= width) {
         currentLine = testLine;
       } else {
         if (currentLine) wrapped.push(currentLine);
-        currentLine = word;
+        currentLine = sanitizedWord;
       }
     }
     if (currentLine) wrapped.push(currentLine);
@@ -234,13 +355,18 @@ export async function convertDocxToPdfClientSide(file: File): Promise<ArrayBuffe
         currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
         currentY = pageHeight - margin;
       }
-      currentPage.drawText(wl, {
-        x: margin,
-        y: currentY,
-        size: fontSize,
-        font: fontRegular,
-        color: rgb(0.15, 0.15, 0.15)
-      });
+      safeDrawText(
+        currentPage,
+        wl,
+        {
+          x: margin,
+          y: currentY,
+          size: fontSize,
+          color: rgb(0.15, 0.15, 0.15)
+        },
+        fontRegular,
+        allowedCodes
+      );
       currentY -= lineHeight;
     }
   }
