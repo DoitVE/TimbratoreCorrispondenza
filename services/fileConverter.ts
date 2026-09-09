@@ -6,6 +6,7 @@
 import * as mammoth from 'mammoth';
 import * as docx from 'docx-preview';
 import html2canvas from 'html2canvas';
+import JSZip from 'jszip';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 export interface ProcessedDocumentFile {
@@ -263,6 +264,107 @@ function extractTextFromBinaryDoc(buffer: ArrayBuffer): string {
 }
 
 /**
+ * Estrae una mappa di immagini/loghi (Base64 data URI) direttamente dai media dell'archivio DOCX
+ */
+async function extractDocxMediaMap(arrayBuffer: ArrayBuffer): Promise<Map<string, string>> {
+  const mediaMap = new Map<string, string>();
+  try {
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    const mediaFiles: string[] = [];
+    zip.forEach((path) => {
+      if (path.startsWith('word/media/') && !path.endsWith('/')) {
+        mediaFiles.push(path);
+      }
+    });
+
+    for (const path of mediaFiles) {
+      const lower = path.toLowerCase();
+      let mime = 'image/png';
+      if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg';
+      else if (lower.endsWith('.gif')) mime = 'image/gif';
+      else if (lower.endsWith('.svg')) mime = 'image/svg+xml';
+      else if (lower.endsWith('.webp')) mime = 'image/webp';
+      else if (lower.endsWith('.bmp')) mime = 'image/bmp';
+
+      const base64 = await zip.file(path)?.async('base64');
+      if (base64) {
+        const dataUri = `data:${mime};base64,${base64}`;
+        // Registra con percorso completo, solo filename e lowercase
+        const fileName = path.split('/').pop() || '';
+        mediaMap.set(path, dataUri);
+        mediaMap.set(fileName, dataUri);
+        mediaMap.set(fileName.toLowerCase(), dataUri);
+      }
+    }
+  } catch (err) {
+    console.warn('Estrazione media secondaria non riuscita:', err);
+  }
+  return mediaMap;
+}
+
+/**
+ * Assicura che tutte le immagini e i loghi all'interno del contenitore siano completamente
+ * caricati e decodificati in memoria grafica prima dello scatto di html2canvas.
+ */
+async function ensureAllImagesLoaded(container: HTMLElement, mediaMap: Map<string, string>): Promise<void> {
+  const imgElements = Array.from(container.querySelectorAll<HTMLImageElement>('img'));
+  if (imgElements.length === 0) return;
+
+  // Assegna il fallback se qualche immagine è vuota o ha perso il src
+  let fallbackIndex = 0;
+  const mediaValues = Array.from(mediaMap.values());
+
+  for (const img of imgElements) {
+    img.crossOrigin = 'anonymous';
+    img.loading = 'eager';
+
+    const currentSrc = img.getAttribute('src') || '';
+    if (!currentSrc || currentSrc === 'about:blank') {
+      // Se l'immagine non ha src, abbina per nome o per ordine dai media estratti
+      const alt = img.getAttribute('alt') || '';
+      if (alt && mediaMap.has(alt.toLowerCase())) {
+        img.src = mediaMap.get(alt.toLowerCase())!;
+      } else if (fallbackIndex < mediaValues.length) {
+        img.src = mediaValues[fallbackIndex++];
+      }
+    }
+  }
+
+  // Attende che tutte le immagini abbiano terminato il caricamento e la decodifica grafica
+  const loadPromises = imgElements.map(async (img) => {
+    try {
+      if (img.complete && img.naturalWidth > 0) {
+        if ('decode' in img && typeof img.decode === 'function') {
+          await img.decode();
+        }
+        return;
+      }
+
+      await new Promise<void>((resolve) => {
+        const onFinish = () => {
+          img.removeEventListener('load', onFinish);
+          img.removeEventListener('error', onFinish);
+          if ('decode' in img && typeof img.decode === 'function') {
+            img.decode().then(resolve).catch(() => resolve());
+          } else {
+            resolve();
+          }
+        };
+
+        img.addEventListener('load', onFinish);
+        img.addEventListener('error', onFinish);
+        // Timeout di sicurezza di 1.5 secondi per immagine
+        setTimeout(onFinish, 1500);
+      });
+    } catch {
+      // Non bloccare in caso di singola immagine non decodificabile
+    }
+  });
+
+  await Promise.all(loadPromises);
+}
+
+/**
  * Effettua il rendering grafico ad alta fedeltà di un file Word (.docx) direttamente nel browser.
  * Utilizza docx-preview per interpretare il layout Word originale (tabelle con bordi, immagini,
  * intestazioni, piè di pagina, colori, allineamenti, font) e html2canvas + pdf-lib per generare
@@ -273,17 +375,21 @@ async function renderDocxWithHighFidelity(arrayBuffer: ArrayBuffer): Promise<Arr
     throw new Error('Ambiente browser non disponibile.');
   }
 
-  // Crea un contenitore isolato fuori dallo schermo
+  // Estrai preventivamente la mappa di tutte le immagini e loghi presenti nel pacchetto Word
+  const mediaMap = await extractDocxMediaMap(arrayBuffer);
+
+  // Crea un contenitore montato nel DOM ma non invasivo visivamente (con clip per rendering browser completo)
   const container = document.createElement('div');
   container.setAttribute('data-docx-render-stage', 'true');
   container.style.position = 'fixed';
-  container.style.left = '-99999px';
+  container.style.left = '0';
   container.style.top = '0';
   container.style.width = '816px'; // standard A4/Letter a 96 DPI
   container.style.background = '#ffffff';
   container.style.color = '#000000';
   container.style.zIndex = '-99999';
-  container.style.opacity = '1';
+  container.style.opacity = '0.01'; // visibile al browser engine ma trasparente all'utente
+  container.style.pointerEvents = 'none';
   container.style.overflow = 'visible';
   container.style.boxSizing = 'border-box';
   document.body.appendChild(container);
@@ -305,15 +411,18 @@ async function renderDocxWithHighFidelity(arrayBuffer: ArrayBuffer): Promise<Arr
       useBase64URL: true,
     });
 
-    // Breve attesa per permettere il layout rendering, calcolo immagini e stili
-    await new Promise((resolve) => setTimeout(resolve, 150));
-
     const wrapper = container.querySelector<HTMLElement>('.docx-wrapper');
     if (wrapper) {
       wrapper.style.background = '#ffffff';
       wrapper.style.padding = '0';
       wrapper.style.margin = '0';
     }
+
+    // Assicura il caricamento e decodifica completa di tutti i loghi e immagini
+    await ensureAllImagesLoaded(container, mediaMap);
+
+    // Breve stabilizzazione per il completamento del reflow del DOM
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     let sections = Array.from(container.querySelectorAll<HTMLElement>('section.docx'));
     if (sections.length === 0) {
