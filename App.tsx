@@ -403,8 +403,34 @@ function App() {
          return;
     }
 
+    // 1. Chiedi SUBITO dove salvare all'istante esatto del click dell'utente (0ms),
+    // garantendo che il token di sicurezza 'user gesture' del browser non scada mai
+    let handle: any = null;
+    let fallbackToDownload = false;
+
+    if ('showSaveFilePicker' in window) {
+      try {
+        handle = await (window as any).showSaveFilePicker({
+          suggestedName: doc.name,
+          types: [{
+            description: 'PDF',
+            accept: { 'application/pdf': ['.pdf'] }
+          }],
+        });
+      } catch (e: any) {
+        if (e.name === 'AbortError') {
+          // L'utente ha premuto "Annulla" nella finestra di scelta del file
+          return;
+        }
+        console.warn("showSaveFilePicker non disponibile o bloccato, attivo fallback:", e);
+        fallbackToDownload = true;
+      }
+    } else {
+      fallbackToDownload = true;
+    }
+
+    // 2. Con destinazione confermata dall'utente, procedi con l'elaborazione completa del PDF
     let saveSuccess = false;
-    let userCancelled = false;
 
     try {
       let sourceData: ArrayBuffer | File = doc.file;
@@ -413,62 +439,50 @@ function App() {
       const modifiedPdfBytes = await savePdfWithAnnotations(sourceData, doc.pages, appMode, doitSignaturePath);
       const blob = new Blob([modifiedPdfBytes.buffer], { type: 'application/pdf' });
       
-      if ('showSaveFilePicker' in window) {
-        let handle: any = null;
+      if (handle) {
         try {
-          handle = await (window as any).showSaveFilePicker({
-            suggestedName: doc.name,
-            types: [{
-              description: 'PDF',
-              accept: { 'application/pdf': ['.pdf'] }
-            }],
-          });
+          await writeWithTimeout(handle, blob, 5000); // 5 secondi di timeout
+          saveSuccess = true;
         } catch (e: any) {
-          console.error("Errore apertura file picker:", e);
-          if (e.name === 'AbortError') {
-            userCancelled = true;
-          } else {
-            alert("Errore durante la scelta del file: " + (e.message || e));
-          }
-        }
+          console.error("Dettaglio errore scrittura:", e);
+          const wantSaveAs = window.confirm(
+            "Impossibile sovrascrivere il file. Potrebbe essere aperto in Adobe Reader o in un altro programma. Vuoi salvarne una nuova copia con Salva con nome?"
+          );
+          if (wantSaveAs) {
+            try {
+              const suggestedCopyName = doc.name.toLowerCase().endsWith('.pdf')
+                ? doc.name.slice(0, -4) + '_copia.pdf'
+                : doc.name + '_copia.pdf';
 
-        if (handle) {
-          try {
-            await writeWithTimeout(handle, blob, 5000); // 5 secondi di timeout
-            saveSuccess = true;
-          } catch (e: any) {
-            console.error("Dettaglio errore scrittura:", e);
-            const wantSaveAs = window.confirm(
-              "Impossibile sovrascrivere il file. Potrebbe essere aperto in Adobe Reader o in un altro programma. Vuoi salvarne una nuova copia con Salva con nome?"
-            );
-            if (wantSaveAs) {
-              try {
-                const suggestedCopyName = doc.name.toLowerCase().endsWith('.pdf')
-                  ? doc.name.slice(0, -4) + '_copia.pdf'
-                  : doc.name + '_copia.pdf';
+              const newHandle = await (window as any).showSaveFilePicker({
+                suggestedName: suggestedCopyName,
+                types: [{
+                  description: 'PDF',
+                  accept: { 'application/pdf': ['.pdf'] }
+                }],
+              });
 
-                const newHandle = await (window as any).showSaveFilePicker({
-                  suggestedName: suggestedCopyName,
-                  types: [{
-                    description: 'PDF',
-                    accept: { 'application/pdf': ['.pdf'] }
-                  }],
-                });
-
-                if (newHandle) {
-                  await writeWithTimeout(newHandle, blob, 5000);
-                  saveSuccess = true;
-                }
-              } catch (saveAsErr: any) {
-                console.error("Errore durante Salva con nome:", saveAsErr);
-                if (saveAsErr.name !== 'AbortError') {
-                  alert("Impossibile salvare la copia: " + (saveAsErr.message || saveAsErr));
-                }
+              if (newHandle) {
+                await writeWithTimeout(newHandle, blob, 5000);
+                saveSuccess = true;
+              }
+            } catch (saveAsErr: any) {
+              console.error("Errore durante Salva con nome:", saveAsErr);
+              if (saveAsErr.name !== 'AbortError') {
+                // Fallback di emergenza
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = doc.name;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(link.href);
+                saveSuccess = true;
               }
             }
           }
         }
-      } else {
+      } else if (fallbackToDownload) {
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         link.download = doc.name;
@@ -479,8 +493,7 @@ function App() {
         saveSuccess = true;
       }
 
-      // LOGICA INTELLIGENTE: Se il salvataggio è riuscito, procedi.
-      // Se NON è riuscito e NON hai annullato tu, allora c'è un blocco (es. Adobe).
+      // Se il salvataggio è riuscito, procedi al prossimo documento o finalizza
       if (saveSuccess) {
         if (currentDocIndex < documents.length - 1) {
           updateCurrentDocument({ status: 'completed' });
@@ -535,20 +548,35 @@ function App() {
           const suggestedName = formatArchiveFileName();
 
           // Prefer the File System Access API to ask the user where to save
+          let handle: any = null;
+          let fallback = false;
+
           if (typeof (window as any).showSaveFilePicker === 'function') {
-              const handle = await (window as any).showSaveFilePicker({
-                  suggestedName,
-                  types: [
-                      {
-                          description: 'JSON',
-                          accept: { 'application/json': ['.json'] }
-                      }
-                  ]
-              });
+              try {
+                  handle = await (window as any).showSaveFilePicker({
+                      suggestedName,
+                      types: [
+                          {
+                              description: 'JSON',
+                              accept: { 'application/json': ['.json'] }
+                          }
+                      ]
+                  });
+              } catch (pickerErr: any) {
+                  if (pickerErr.name === 'AbortError') {
+                      return; // L'utente ha premuto "Annulla"
+                  }
+                  fallback = true;
+              }
+          } else {
+              fallback = true;
+          }
+
+          if (handle) {
               const writable = await handle.createWritable();
               await writable.write(new Blob([jsonString], { type: 'application/json' }));
               await writable.close();
-          } else {
+          } else if (fallback) {
               // Fallback: trigger a download with the suggested filename
               const blob = new Blob([jsonString], { type: 'application/json' });
               const link = document.createElement('a');
