@@ -92,14 +92,13 @@ export const MainView: React.FC<MainViewProps> = ({
     }
   }, [pages, focusLastAdded]);
 
-  // Logic to auto-expand all textareas on render
+  // Logic to auto-expand FREE_TEXT textareas on render
   useEffect(() => {
-    const textareas = document.querySelectorAll('textarea');
+    const textareas = document.querySelectorAll('textarea.free-text-area');
     textareas.forEach(ta => {
-      if (ta.classList.contains('resize-none')) {
-        ta.style.height = 'auto';
-        ta.style.height = ta.scrollHeight + 'px';
-      }
+      const el = ta as HTMLTextAreaElement;
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
     });
   }, [pages]);
 
@@ -347,7 +346,7 @@ export const MainView: React.FC<MainViewProps> = ({
                     }}
                     onMouseDown={(e) => e.stopPropagation()} 
                     onPointerDown={(e) => e.stopPropagation()} 
-                    className="resize-none outline-none text-black font-sans font-normal leading-tight text-center w-full block p-2 overflow-hidden relative z-[110]"
+                    className="free-text-area resize-none outline-none text-black font-sans font-normal leading-tight text-center w-full block p-2 overflow-hidden relative z-[110]"
                     placeholder={hideStructureOnly ? "" : "Scrivi qui..."}
                     style={{ 
                         fontSize: `7.5cqw`, 
@@ -623,11 +622,10 @@ export const MainView: React.FC<MainViewProps> = ({
                 </div>
             ))}
 
-            {/* Notes Area: Ancorata rigorosamente sotto l'ultima riga della tabella ed espandibile verso il basso */}
-            <div className="notes-area absolute left-0 right-0 z-[105] flex flex-col justify-start items-center overflow-visible"
+            {/* Notes Area: Rigorosamente vincolata tra la fine della tabella e il fondo del timbro (bottom: 0) */}
+            <div className="notes-area absolute left-0 right-0 bottom-0 z-[105] flex flex-col justify-start items-center overflow-visible"
                  style={{ 
                      top: `${((1.25 + stamp.rows.length) / totalUnits) * 100}%`,
-                     minHeight: `${((totalUnits - stamp.rows.length - 1.25) / totalUnits) * 100}%`,
                      width: '100%'
                  }}>
                 {/* Placeholder "NOTE" Grigio Chiarissimo */}
@@ -641,28 +639,20 @@ export const MainView: React.FC<MainViewProps> = ({
 
                 <textarea 
                     value={stamp.notes}
-                    ref={(el) => {
-                        if (el) {
-                            el.style.height = 'auto';
-                            el.style.height = `${Math.max(el.scrollHeight, 24)}px`;
-                        }
-                    }}
                     onFocus={() => setFocusedStampId(stamp.id)}
                     onBlur={() => setFocusedStampId(null)}
                     onChange={(e) => {
                         handleNotesChange(pageIndex, stamp, e.target.value);
-                        e.target.style.height = 'auto';
-                        e.target.style.height = `${Math.max(e.target.scrollHeight, 24)}px`;
                     }}
                     onPointerDown={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()} 
-                    className="w-full resize-none outline-none text-black font-sans font-normal leading-tight text-center relative z-[106] px-1 py-0.5 block overflow-hidden"
+                    className="w-full h-full resize-none outline-none text-black font-sans font-normal leading-tight text-center relative z-[106] px-1 py-0.5 block overflow-hidden"
                     style={{ 
                         fontSize: `7.5cqw`, 
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
-                        minHeight: `${((totalUnits - stamp.rows.length - 1.25) / totalUnits) * 100}%`,
-                        height: 'auto',
+                        height: '100%',
+                        maxHeight: '100%',
                         textShadow: EXTRA_THICK_HALO,
                         backgroundColor: stamp.notes ? 'white' : 'transparent',
                         boxShadow: stamp.notes ? '0 1px 0 0 white' : 'none' 
