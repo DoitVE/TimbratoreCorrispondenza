@@ -53,7 +53,7 @@ export const MainView: React.FC<MainViewProps> = ({
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [initialDims, setInitialDims, getInitialDims] = useGetState({ x: 0, y: 0, width: 0, height: 0 });
   const [focusLastAdded, setFocusLastAdded] = useState(false);
-  const [textCaseMode, setTextCaseMode] = useState<'uppercase' | 'lowercase'>('uppercase');
+  const [textCaseMode, setTextCaseMode] = useState<'uppercase' | 'lowercase'>('lowercase');
   const [focusedStampId, setFocusedStampId] = useState<string | null>(null);
   const rafScheduledRef = useRef(false);
   const pendingMoveRef = useRef<{ x: number; y: number } | null>(null);
@@ -348,7 +348,7 @@ export const MainView: React.FC<MainViewProps> = ({
                     onMouseDown={(e) => e.stopPropagation()} 
                     onPointerDown={(e) => e.stopPropagation()} 
                     className="resize-none outline-none text-black font-sans font-normal leading-tight text-center w-full block p-2 overflow-hidden relative z-[110]"
-                    placeholder={hideStructureOnly ? "" : "SCRIVI QUI..."}
+                    placeholder={hideStructureOnly ? "" : "Scrivi qui..."}
                     style={{ 
                         fontSize: `7.5cqw`, 
                         whiteSpace: 'pre-wrap',
