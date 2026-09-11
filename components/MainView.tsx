@@ -24,6 +24,8 @@ interface MainViewProps {
   onExportArchive?: () => void;
   onPrevDocument?: () => void;
   currentDocIndex?: number;
+  saveErrorMessage?: string | null;
+  onDismissSaveError?: () => void;
 }
 
 export const MainView: React.FC<MainViewProps> = ({ 
@@ -43,7 +45,9 @@ export const MainView: React.FC<MainViewProps> = ({
   doitSignatureUrl,
   onExportArchive,
   onPrevDocument,
-  currentDocIndex = 0
+  currentDocIndex = 0,
+  saveErrorMessage,
+  onDismissSaveError
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -747,6 +751,29 @@ export const MainView: React.FC<MainViewProps> = ({
             )}
         </div>
       </div>
+
+      {/* Banner di Avviso Salvataggio Fallito / File Bloccato */}
+      {saveErrorMessage && (
+        <div className="bg-red-600 text-white px-6 py-3.5 flex items-center justify-between shadow-lg z-[101] shrink-0 border-b border-red-700 animate-in fade-in duration-200">
+          <div className="flex items-center gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div className="text-sm font-medium leading-relaxed">
+              <span className="font-bold tracking-wide uppercase mr-1.5">Attenzione:</span>
+              {saveErrorMessage}
+            </div>
+          </div>
+          {onDismissSaveError && (
+            <button 
+              onClick={onDismissSaveError}
+              className="ml-4 bg-red-700/80 hover:bg-red-800 text-white px-3 py-1 rounded text-xs font-bold uppercase transition"
+              title="Chiudi avviso">
+              Chiudi
+            </button>
+          )}
+        </div>
+      )}
 
       <div ref={containerRef} className="flex-1 overflow-auto p-8 flex flex-col items-center scroll-smooth" style={{ touchAction: 'pan-y' }}>
         {pages.map((page, index) => (

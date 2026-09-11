@@ -26,6 +26,7 @@ function App() {
   const [showMailModal, setShowMailModal] = useState<boolean>(false);
   const [lastArchiveJson, setLastArchiveJson] = useState<string | undefined>(undefined);
   const [signatureOverrides, setSignatureOverrides] = useState<Record<StampType, StampType | undefined>>({} as any);
+  const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
 
   const resetSession = useCallback(() => {
       setAppMode('selection');
@@ -38,6 +39,7 @@ function App() {
       setShowMailModal(false);
       setLastArchiveJson(undefined);
       setSignatureOverrides({} as any);
+      setSaveErrorMessage(null);
   }, []);
 
   const handleGoHome = useCallback(() => {
@@ -404,7 +406,8 @@ function App() {
         });
       } catch (e: any) {
         if (e.name === 'AbortError') {
-          // L'utente ha premuto "Annulla" nella finestra di scelta del file
+          // L'utente ha premuto intenzionalmente "Annulla" nella finestra di scelta del file.
+          // In questo caso non mostriamo alcun errore: l'utente torna all'anteprima senza modifiche.
           return;
         }
         console.warn("showSaveFilePicker non disponibile o bloccato, attivo fallback:", e);
@@ -428,47 +431,12 @@ function App() {
         try {
           await writeFile(handle, blob);
           saveSuccess = true;
+          setSaveErrorMessage(null);
         } catch (e: any) {
-          console.error("Dettaglio errore scrittura:", e);
-          const wantSaveAs = window.confirm(
-            `Impossibile sovrascrivere il file "${doc.name}".\n` +
-            `Il file risulta aperto o bloccato da un altro programma (es. Adobe Reader o un visualizzatore PDF).\n\n` +
-            `• Se vuoi sovrascrivere questo file: chiudilo nel programma esterno, premi "Annulla" e riclicca su "Salva" (l'anteprima e i timbri rimarranno intatti).\n` +
-            `• Se invece vuoi salvarne una nuova copia: premi "OK" per scegliere "Salva con nome".`
+          console.error("Dettaglio errore scrittura (possibile file aperto in altro programma):", e);
+          setSaveErrorMessage(
+            `Impossibile salvare "${doc.name}". Il file risulta aperto o bloccato in Adobe Acrobat o in un altro programma. Chiudi il file esterno e riprova a cliccare su Salva.`
           );
-          if (wantSaveAs) {
-            try {
-              const suggestedCopyName = doc.name.toLowerCase().endsWith('.pdf')
-                ? doc.name.slice(0, -4) + '_copia.pdf'
-                : doc.name + '_copia.pdf';
-
-              const newHandle = await (window as any).showSaveFilePicker({
-                suggestedName: suggestedCopyName,
-                types: [{
-                  description: 'PDF',
-                  accept: { 'application/pdf': ['.pdf'] }
-                }],
-              });
-
-              if (newHandle) {
-                await writeFile(newHandle, blob);
-                saveSuccess = true;
-              }
-            } catch (saveAsErr: any) {
-              console.error("Errore durante Salva con nome:", saveAsErr);
-              if (saveAsErr.name !== 'AbortError') {
-                // Fallback di emergenza
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = doc.name;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(link.href);
-                saveSuccess = true;
-              }
-            }
-          }
         }
       } else if (fallbackToDownload) {
         const link = document.createElement('a');
@@ -479,10 +447,12 @@ function App() {
         document.body.removeChild(link);
         URL.revokeObjectURL(link.href);
         saveSuccess = true;
+        setSaveErrorMessage(null);
       }
 
       // Se il salvataggio è riuscito, procedi al prossimo documento o finalizza
       if (saveSuccess) {
+        setSaveErrorMessage(null);
         if (currentDocIndex < documents.length - 1) {
           updateCurrentDocument({ status: 'completed' });
           setCurrentDocIndex(prev => prev + 1);
@@ -495,12 +465,13 @@ function App() {
 
     } catch (globalError: any) {
       console.error("Global Save Error:", globalError);
-      alert("ERRORE CRITICO: Si è verificato un problema tecnico durante l'elaborazione del PDF.\n\n" + String(globalError?.message || globalError));
+      setSaveErrorMessage("Errore durante l'elaborazione del PDF: " + String(globalError?.message || globalError));
     }
   };
   
   const handlePrevDocument = () => {
     if (currentDocIndex > 0) {
+        setSaveErrorMessage(null);
         setCurrentDocIndex(prev => prev - 1);
         setVisiblePageIndex(0);
     }
@@ -508,6 +479,7 @@ function App() {
 
   const handleSkipDocument = () => {
     if (currentDocIndex === -1) return;
+    setSaveErrorMessage(null);
     if (currentDocIndex < documents.length - 1) {
       updateCurrentDocument({ status: 'completed' }); 
       setCurrentDocIndex(prev => prev + 1);
@@ -635,6 +607,8 @@ function App() {
           onExportArchive={handleExportArchive}
           onPrevDocument={handlePrevDocument}
           currentDocIndex={currentDocIndex}
+          saveErrorMessage={saveErrorMessage}
+          onDismissSaveError={() => setSaveErrorMessage(null)}
         />
       </div>
       <MailModal 
