@@ -92,13 +92,14 @@ export const MainView: React.FC<MainViewProps> = ({
     }
   }, [pages, focusLastAdded]);
 
-  // Logic to auto-expand FREE_TEXT textareas on render
+  // Logic to auto-expand all textareas on render and adjust heights
   useEffect(() => {
-    const textareas = document.querySelectorAll('textarea.free-text-area');
+    const textareas = document.querySelectorAll('textarea');
     textareas.forEach(ta => {
       const el = ta as HTMLTextAreaElement;
       el.style.height = 'auto';
-      el.style.height = el.scrollHeight + 'px';
+      const minH = el.parentElement?.offsetHeight || 24;
+      el.style.height = `${Math.max(el.scrollHeight, minH)}px`;
     });
   }, [pages]);
 
@@ -334,7 +335,8 @@ export const MainView: React.FC<MainViewProps> = ({
                     ref={(el) => {
                         if (el) {
                             el.style.height = 'auto';
-                            el.style.height = `${Math.max(el.scrollHeight, 24)}px`;
+                            const minH = el.parentElement?.offsetHeight || 24;
+                            el.style.height = `${Math.max(el.scrollHeight, minH)}px`;
                         }
                     }}
                     onFocus={() => setFocusedStampId(stamp.id)}
@@ -342,8 +344,10 @@ export const MainView: React.FC<MainViewProps> = ({
                     onChange={(e) => {
                         handleNotesChange(pageIndex, stamp, e.target.value);
                         e.target.style.height = 'auto';
-                        e.target.style.height = `${Math.max(e.target.scrollHeight, 24)}px`;
+                        const minH = e.target.parentElement?.offsetHeight || 24;
+                        e.target.style.height = `${Math.max(e.target.scrollHeight, minH)}px`;
                     }}
+                    onScroll={(e) => { (e.target as HTMLElement).scrollTop = 0; }}
                     onMouseDown={(e) => e.stopPropagation()} 
                     onPointerDown={(e) => e.stopPropagation()} 
                     className="free-text-area resize-none outline-none text-black font-sans font-normal leading-tight text-center w-full block p-2 overflow-hidden relative z-[110]"
@@ -622,10 +626,11 @@ export const MainView: React.FC<MainViewProps> = ({
                 </div>
             ))}
 
-            {/* Notes Area: Rigorosamente vincolata tra la fine della tabella e il fondo del timbro (bottom: 0) */}
-            <div className="notes-area absolute left-0 right-0 bottom-0 z-[105] flex flex-col justify-start items-center overflow-visible"
+            {/* Notes Area: Ancorata sotto l'ultima riga della tabella ed espandibile dinamicamente verso il basso */}
+            <div className="notes-area absolute left-0 right-0 z-[105] flex flex-col justify-start items-center overflow-visible"
                  style={{ 
                      top: `${((1.25 + stamp.rows.length) / totalUnits) * 100}%`,
+                     minHeight: `${((totalUnits - stamp.rows.length - 1.25) / totalUnits) * 100}%`,
                      width: '100%'
                  }}>
                 {/* Placeholder "NOTE" Grigio Chiarissimo */}
@@ -639,20 +644,30 @@ export const MainView: React.FC<MainViewProps> = ({
 
                 <textarea 
                     value={stamp.notes}
+                    ref={(el) => {
+                        if (el) {
+                            el.style.height = 'auto';
+                            const minH = el.parentElement?.offsetHeight || 24;
+                            el.style.height = `${Math.max(el.scrollHeight, minH)}px`;
+                        }
+                    }}
                     onFocus={() => setFocusedStampId(stamp.id)}
                     onBlur={() => setFocusedStampId(null)}
                     onChange={(e) => {
                         handleNotesChange(pageIndex, stamp, e.target.value);
+                        e.target.style.height = 'auto';
+                        const minH = e.target.parentElement?.offsetHeight || 24;
+                        e.target.style.height = `${Math.max(e.target.scrollHeight, minH)}px`;
                     }}
+                    onScroll={(e) => { (e.target as HTMLElement).scrollTop = 0; }}
                     onPointerDown={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()} 
-                    className="w-full h-full resize-none outline-none text-black font-sans font-normal leading-tight text-center relative z-[106] px-1 py-0.5 block overflow-hidden"
+                    className="w-full resize-none outline-none text-black font-sans font-normal leading-tight text-center relative z-[106] px-1 py-0.5 block overflow-hidden"
                     style={{ 
                         fontSize: `7.5cqw`, 
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
-                        height: '100%',
-                        maxHeight: '100%',
+                        minHeight: `${((totalUnits - stamp.rows.length - 1.25) / totalUnits) * 100}%`,
                         textShadow: EXTRA_THICK_HALO,
                         backgroundColor: stamp.notes ? 'white' : 'transparent',
                         boxShadow: stamp.notes ? '0 1px 0 0 white' : 'none' 
@@ -673,6 +688,15 @@ export const MainView: React.FC<MainViewProps> = ({
                     >
                         {textCaseMode === 'uppercase' ? 'Aa' : 'aA'}
                     </button>
+                )}
+
+                {/* Resize Handle per Timbro Standard: Ancorato saldamente all'angolo in basso a destra dell'area note */}
+                {!isLocked && (
+                    <div className="absolute cursor-nwse-resize z-[170] flex items-end justify-end p-0" 
+                         style={{ bottom: '0px', right: '0px' }}
+                         onPointerDown={(e) => handlePointerDownResize(e, pageIndex, stamp, isLocked)}>
+                        <div className="w-3.5 h-3.5 bg-[#c60c30]" style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 100%)' }}></div>
+                    </div>
                 )}
             </div>
         </div>
@@ -758,7 +782,9 @@ export const MainView: React.FC<MainViewProps> = ({
                     <div key={stamp.id} className="absolute select-none group stamp-container"
                         style={{
                             left: `${stamp.x / 10}%`, top: `${stamp.y / 10}%`,
-                            width: `${stamp.width / 10}%`, height: `${stamp.height / 10}%`,
+                            width: `${stamp.width / 10}%`, 
+                            height: stamp.type === 'FREE_TEXT' ? 'auto' : `${stamp.height / 10}%`,
+                            minHeight: stamp.type === 'FREE_TEXT' ? `${stamp.height / 10}%` : undefined,
                             zIndex: (stamp.type === 'FREE_TEXT' || stamp.type === 'FREE_CHECK') ? 150 : (activeStampId === stamp.id ? 80 : 70),
                             backgroundColor: 'transparent', boxSizing: 'border-box', fontFamily: 'Inter, Helvetica, sans-serif', fontWeight: 'bold',
                             border: (!isOverlayVisible || stamp.type === 'SIGNATURE' || stamp.type === 'FREE_CHECK' || isStandardStamp(stamp.type)) ? 'none' : `1.5px solid ${mainBorderColor}`, 
@@ -768,7 +794,7 @@ export const MainView: React.FC<MainViewProps> = ({
                         onPointerDown={(e) => handlePointerDownMove(e, index, stamp, isLocked)}>
                 
                 <style>{`
-                    .stamp-container { container-type: size; }
+                    .stamp-container { container-type: inline-size; }
                 `}</style>
                 {renderOverlayContent(index, stamp)}
                 
@@ -786,7 +812,7 @@ export const MainView: React.FC<MainViewProps> = ({
                             className="absolute -top-3 -right-3 w-8 h-8 bg-gray-800 text-white rounded-full flex items-center justify-center text-xs shadow-md z-[160] hover:bg-black">✕</button>
                 )}
 
-                {!isLocked && (
+                {!isLocked && !isStandardStamp(stamp.type) && (
                     <div className="absolute cursor-nwse-resize z-[170] flex items-end justify-end p-0" 
                          style={{ bottom: '0px', right: '0px' }}
                          onPointerDown={(e) => handlePointerDownResize(e, index, stamp, isLocked)}>
