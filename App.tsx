@@ -350,33 +350,18 @@ function App() {
     }
   };
 
-  const writeWithTimeout = async (handle: any, blob: Blob, timeoutMs: number): Promise<void> => {
-    let writable: any = null;
-    let timeoutId: any;
-
-    const timeoutPromise = new Promise<void>((_, reject) => {
-      timeoutId = setTimeout(async () => {
-        if (writable) {
-          try {
-            await writable.abort();
-          } catch (abortErr) {
-            console.warn("Failed to abort stream on timeout", abortErr);
-          }
-        }
-        reject(new Error("TIMEOUT_LOCKED"));
-      }, timeoutMs);
-    });
-
-    const writePromise = (async () => {
-      writable = await handle.createWritable();
+  const writeFile = async (handle: any, blob: Blob): Promise<void> => {
+    const writable = await handle.createWritable();
+    try {
       await writable.write(blob);
       await writable.close();
-    })();
-
-    try {
-      await Promise.race([writePromise, timeoutPromise]);
-    } finally {
-      clearTimeout(timeoutId);
+    } catch (err) {
+      try {
+        await writable.abort();
+      } catch (abortErr) {
+        console.warn("Failed to abort writable stream", abortErr);
+      }
+      throw err;
     }
   };
 
@@ -441,12 +426,15 @@ function App() {
       
       if (handle) {
         try {
-          await writeWithTimeout(handle, blob, 5000); // 5 secondi di timeout
+          await writeFile(handle, blob);
           saveSuccess = true;
         } catch (e: any) {
           console.error("Dettaglio errore scrittura:", e);
           const wantSaveAs = window.confirm(
-            "Impossibile sovrascrivere il file. Potrebbe essere aperto in Adobe Reader o in un altro programma. Vuoi salvarne una nuova copia con Salva con nome?"
+            `Impossibile sovrascrivere il file "${doc.name}".\n` +
+            `Il file risulta aperto o bloccato da un altro programma (es. Adobe Reader o un visualizzatore PDF).\n\n` +
+            `• Se vuoi sovrascrivere questo file: chiudilo nel programma esterno, premi "Annulla" e riclicca su "Salva" (l'anteprima e i timbri rimarranno intatti).\n` +
+            `• Se invece vuoi salvarne una nuova copia: premi "OK" per scegliere "Salva con nome".`
           );
           if (wantSaveAs) {
             try {
@@ -463,7 +451,7 @@ function App() {
               });
 
               if (newHandle) {
-                await writeWithTimeout(newHandle, blob, 5000);
+                await writeFile(newHandle, blob);
                 saveSuccess = true;
               }
             } catch (saveAsErr: any) {
