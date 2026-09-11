@@ -406,8 +406,9 @@ function App() {
         });
       } catch (e: any) {
         if (e.name === 'AbortError') {
-          // L'utente ha premuto intenzionalmente "Annulla" nella finestra di scelta del file.
-          // In questo caso non mostriamo alcun errore: l'utente torna all'anteprima senza modifiche.
+          setSaveErrorMessage(
+            `Salvataggio annullato.\n• Se hai annullato volontariamente l'operazione riprenderai da dove avevi interrotto.\n• Se invece avevi provato a sovrascrivere il documento, non è stato possibile perché il file risulta aperto in un altro programma. Chiudilo e riprova.`
+          );
           return;
         }
         console.warn("showSaveFilePicker non disponibile o bloccato, attivo fallback:", e);
@@ -435,7 +436,7 @@ function App() {
         } catch (e: any) {
           console.error("Dettaglio errore scrittura (possibile file aperto in altro programma):", e);
           setSaveErrorMessage(
-            `Impossibile salvare "${doc.name}". Il file risulta aperto o bloccato in Adobe Acrobat o in un altro programma. Chiudi il file esterno e riprova a cliccare su Salva.`
+            `Salvataggio annullato.\n• Se hai annullato volontariamente l'operazione riprenderai da dove avevi interrotto.\n• Se invece avevi provato a sovrascrivere il documento, non è stato possibile perché il file risulta aperto in un altro programma. Chiudilo e riprova.`
           );
         }
       } else if (fallbackToDownload) {
