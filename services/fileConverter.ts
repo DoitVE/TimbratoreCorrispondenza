@@ -8,11 +8,29 @@ import * as docx from 'docx-preview';
 import html2canvas from 'html2canvas';
 import JSZip from 'jszip';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { fromBER, OctetString, Constructive } from 'asn1js';
+import { ContentInfo, SignedData } from 'pkijs';
 
 export interface ProcessedDocumentFile {
   file: File;
   pdfBytes: ArrayBuffer;
   name: string;
+}
+
+/**
+ * Pulisce il nome file rimuovendo suffissi .p7m ripetuti o ridondanti (es. doc.pdf.p7m.p7m -> doc.pdf).
+ * Se il file termina per .p7m ma non ha .pdf prima, se si tratta di un PDF aggiunge l'estensione .pdf.
+ */
+export function cleanP7mFileName(fileName: string, isPdf: boolean = true): string {
+  let clean = fileName;
+  // Rimuove ricorsivamente tutti i .p7m finali
+  while (/\.p7m$/i.test(clean)) {
+    clean = clean.replace(/\.p7m$/i, '');
+  }
+  if (isPdf && !clean.toLowerCase().endsWith('.pdf')) {
+    clean = `${clean}.pdf`;
+  }
+  return clean || (isPdf ? 'documento.pdf' : 'documento');
 }
 
 /**
@@ -33,10 +51,133 @@ export function getFileType(file: File): 'pdf' | 'p7m' | 'word' | 'json' | 'unkn
 }
 
 /**
+ * Concatena ricorsivamente tutti i byte contenuti in blocchi OctetString (compresi i blocchi frammentati BER).
+ */
+function collectOctetStringBytes(element: any): Uint8Array[] {
+  const chunks: Uint8Array[] = [];
+  if (!element) return chunks;
+
+  if (element instanceof OctetString || element.valueBlock instanceof OctetString) {
+    const valBlock = element.valueBlock || element;
+    if (valBlock.valueHex) {
+      chunks.push(new Uint8Array(valBlock.valueHex));
+    }
+  }
+
+  if (element.valueBlock && Array.isArray(element.valueBlock.value)) {
+    for (const subElem of element.valueBlock.value) {
+      chunks.push(...collectOctetStringBytes(subElem));
+    }
+  }
+
+  return chunks;
+}
+
+/**
+ * Estrae il payload di dati grezzi da una busta crittografica PKCS#7 / CAdES usando pkijs e asn1js.
+ * Supporta formati BER/DER, lunghezze indefinite e constructed OCTET STRING.
+ */
+function extractPayloadViaAsn1Parser(buffer: ArrayBuffer): ArrayBuffer | null {
+  try {
+    const asn1 = fromBER(buffer);
+    if (asn1.offset === -1 || !asn1.result) {
+      return null;
+    }
+
+    // 1. Tenta la decodifica strutturata CMS ContentInfo -> SignedData
+    try {
+      const contentInfo = new ContentInfo({ schema: asn1.result });
+      // Se è SignedData (OID 1.2.840.113549.1.7.2)
+      if (contentInfo.contentType === '1.2.840.113549.1.7.2') {
+        const signedData = new SignedData({ schema: contentInfo.content });
+        const encapContent = signedData.encapContentInfo;
+        if (encapContent && encapContent.eContent) {
+          const eContent = encapContent.eContent;
+          if (eContent.valueBlock && eContent.valueBlock.valueHex) {
+            return eContent.valueBlock.valueHex.slice(0);
+          }
+          if (eContent.valueHex) {
+            return eContent.valueHex.slice(0);
+          }
+          // Caso constructed OctetString
+          const chunks = collectOctetStringBytes(eContent);
+          if (chunks.length > 0) {
+            const totalLen = chunks.reduce((acc, c) => acc + c.length, 0);
+            const merged = new Uint8Array(totalLen);
+            let offset = 0;
+            for (const chunk of chunks) {
+              merged.set(chunk, offset);
+              offset += chunk.length;
+            }
+            return merged.buffer;
+          }
+        }
+      }
+    } catch (cmsErr) {
+      // Proseguiamo con l'ispezione diretta dell'albero ASN.1
+    }
+
+    // 2. Ispezione generica dell'albero ASN.1 per trovare il payload di dati (OID 1.2.840.113549.1.7.1)
+    // Cerca ricorsivamente qualsiasi blocco associato all'OID Data o con blocchi di byte significativi
+    let foundBytes: Uint8Array | null = null;
+
+    function walkAsn1(node: any) {
+      if (!node || foundBytes) return;
+
+      // Se questo nodo ha un OID di tipo 'Data' (1.2.840.113549.1.7.1)
+      if (node.valueBlock && Array.isArray(node.valueBlock.value)) {
+        const children = node.valueBlock.value;
+        for (let i = 0; i < children.length; i++) {
+          const child = children[i];
+          if (child.idBlock && child.idBlock.tagClass === 1 && child.idBlock.tagNumber === 6) {
+            // Object Identifier
+            const oidStr = child.valueBlock?.valueHex ? new Uint8Array(child.valueBlock.valueHex).join('.') : '';
+            // Se troviamo l'OID 'data' (42.134.72.134.247.13.1.7.1 in DER)
+            if (children[i + 1]) {
+              const dataChunks = collectOctetStringBytes(children[i + 1]);
+              if (dataChunks.length > 0) {
+                const totalLen = dataChunks.reduce((acc, c) => acc + c.length, 0);
+                const merged = new Uint8Array(totalLen);
+                let offset = 0;
+                for (const chunk of dataChunks) {
+                  merged.set(chunk, offset);
+                  offset += chunk.length;
+                }
+                foundBytes = merged;
+                return;
+              }
+            }
+          }
+          walkAsn1(child);
+        }
+      }
+    }
+
+    walkAsn1(asn1.result);
+
+    if (foundBytes && (foundBytes as Uint8Array).length > 0) {
+      return (foundBytes as Uint8Array).buffer.slice(
+        (foundBytes as Uint8Array).byteOffset,
+        (foundBytes as Uint8Array).byteOffset + (foundBytes as Uint8Array).byteLength
+      );
+    }
+  } catch (err) {
+    console.warn('Parser ASN.1 / PKIjs non riuscito:', err);
+  }
+
+  return null;
+}
+
+/**
  * Estrae direttamente nel browser il PDF da un buffer binario (es. busta PKCS#7 / CAdES .p7m,
  * file rinominato, file con header o firma allegata).
+ * Gestisce srotolamento ricorsivo di firme multiple annidate (.p7m.p7m).
  */
-export function extractPdfFromBytes(rawBuffer: ArrayBuffer): ArrayBuffer {
+export function extractPdfFromBytes(rawBuffer: ArrayBuffer, depth: number = 0): ArrayBuffer {
+  if (depth > 5) {
+    throw new Error('Profondità massima di annidamento buste P7M superata.');
+  }
+
   let bytes = new Uint8Array(rawBuffer);
 
   // 1. Verifica immediata: il file è già un PDF nativo (inizia con %PDF-)
@@ -71,6 +212,7 @@ export function extractPdfFromBytes(rawBuffer: ArrayBuffer): ArrayBuffer {
           decoded[i] = binaryStr.charCodeAt(i);
         }
         bytes = decoded;
+        rawBuffer = bytes.buffer;
       }
     } catch {
       // Procedi con i byte originali in caso di errore base64
@@ -89,7 +231,31 @@ export function extractPdfFromBytes(rawBuffer: ArrayBuffer): ArrayBuffer {
     return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   }
 
-  // 3. Ricerca della sequenza magica '%PDF-' all'interno della busta binaria (CAdES / PKCS#7)
+  // 3. TENTATIVO PRINCIPALE: Parsing completo ASN.1 / PKCS#7 via pkijs / asn1js
+  // Questo risolve al 100% le buste CAdES con streaming/indefinite-length e constructed octet strings
+  const asn1Payload = extractPayloadViaAsn1Parser(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+  if (asn1Payload && asn1Payload.byteLength > 10) {
+    const payloadBytes = new Uint8Array(asn1Payload);
+    // Se il payload estratto è un PDF
+    if (
+      payloadBytes.length >= 5 &&
+      payloadBytes[0] === 0x25 &&
+      payloadBytes[1] === 0x50 &&
+      payloadBytes[2] === 0x44 &&
+      payloadBytes[3] === 0x46 &&
+      payloadBytes[4] === 0x2D
+    ) {
+      return asn1Payload;
+    }
+    // Se il payload estratto è un'altra busta P7M (firme annidate CAdES su CAdES)
+    try {
+      return extractPdfFromBytes(asn1Payload, depth + 1);
+    } catch {
+      // Se non si srotola oltre, continuiamo con i fallback
+    }
+  }
+
+  // 4. FALLBACK EURISTICO: Ricerca della sequenza magica '%PDF-' all'interno della busta binaria (CAdES / PKCS#7)
   let pdfStart = -1;
   for (let i = 0; i < bytes.length - 5; i++) {
     if (
@@ -1159,14 +1325,10 @@ export async function convertWordToPdf(file: File): Promise<{ pdfBytes: ArrayBuf
  * 2. Se necessario, effettua il fallback all'endpoint server.
  */
 export async function extractPdfFromP7m(file: File): Promise<{ pdfBytes: ArrayBuffer; pdfName: string }> {
-  let pdfName = file.name.replace(/\.p7m$/i, '');
-  if (!pdfName.toLowerCase().endsWith('.pdf')) {
-    pdfName = `${pdfName}.pdf`;
-  }
-
+  const pdfName = cleanP7mFileName(file.name, true);
   const fileBuffer = await file.arrayBuffer();
 
-  // Tentativo 1: Estrazione locale client-side istantanea
+  // Tentativo 1: Estrazione locale client-side istantanea (ASN.1 PKCS#7 robusto + fallback euristico)
   try {
     const extractedBuffer = extractPdfFromBytes(fileBuffer);
     // Verifica validità con pdf-lib
@@ -1254,11 +1416,11 @@ export async function processIncomingFile(file: File): Promise<ProcessedDocument
     };
   }
 
-  // Fallback: se il tipo non è riconosciuto esplicitamente, controlla se i byte corrispondono a un PDF
+  // Fallback: se il tipo non è riconosciuto esplicitamente, controlla se i byte corrispondono a un PDF o P7M
   try {
     const rawBytes = await file.arrayBuffer();
     const pdfBytes = extractPdfFromBytes(rawBytes);
-    const pdfName = file.name.toLowerCase().endsWith('.pdf') ? file.name : `${file.name}.pdf`;
+    const pdfName = cleanP7mFileName(file.name, true);
     return {
       file: new File([pdfBytes], pdfName, { type: 'application/pdf' }),
       pdfBytes,

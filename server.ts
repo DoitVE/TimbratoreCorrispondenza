@@ -96,7 +96,10 @@ async function startServer() {
     }
 
     const originalName = req.file.originalname || "document.p7m";
-    const baseWithoutP7m = originalName.replace(/\.p7m$/i, "");
+    let baseWithoutP7m = originalName;
+    while (/\.p7m$/i.test(baseWithoutP7m)) {
+      baseWithoutP7m = baseWithoutP7m.replace(/\.p7m$/i, "");
+    }
     let safeName = path.basename(baseWithoutP7m).replace(/[^a-zA-Z0-9._-]/g, "_") || "extracted_doc";
 
     let tempDir = "";
