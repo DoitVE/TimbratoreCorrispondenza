@@ -262,7 +262,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </svg>
               <div className="flex flex-col items-center leading-none">
                 <span className="text-sm font-bold text-gray-700 group-hover:text-[#c60c30] text-center">
-                    Carica PDF
+                    Carica PDF o P7M
                 </span>
                 <span className="text-[9px] text-gray-400 font-medium group-hover:text-[#c60c30] mt-0.5 text-center leading-tight">
                     (Possibile multiselezione o trascinamento)

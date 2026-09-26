@@ -40,7 +40,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onSelectMode }) =>
       </div>
 
       <div className="fixed bottom-4 right-4 text-gray-600 font-medium text-xs select-none">
-        v1.1
+        v1.2
       </div>
 
       {/* Buttons Container */}

@@ -142,7 +142,7 @@ export const MainView: React.FC<MainViewProps> = ({
   if (!pages || pages.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-slate-100 text-slate-400 p-4">
-        <p className="text-center text-sm">Carica un PDF o un Archivio JSON per iniziare.</p>
+        <p className="text-center text-sm">Carica un PDF/P7M o un Archivio JSON per iniziare.</p>
       </div>
     );
   }
